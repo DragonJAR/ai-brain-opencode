@@ -7,7 +7,7 @@ termina en tu vault.
 |---|---|---|---|
 | ai-brain-starter | https://github.com/mycelium-hq/ai-brain-starter | MIT | Sustelo del sistema: vault, skills, comandos, plantillas, scripts del diario |
 | humanizer | https://github.com/adelaidasofia/humanizer | MIT | Skill de humanización de prosa (regla "humaniza lo que va hacia fuera") |
-| High-Rise framework | https://github.com/Fundacion-Lontananza/high-rise | MIT | Modelo de 34 pisos emocionales; lo consume el vendor (las notas de piso se generan desde su copia fijada) |
+| High-Rise framework | https://github.com/Fundacion-Lontananza/high-rise | MIT | Modelo de pisos emocionales (34 pisos + índices de nivel y serie); lo consume el vendor (las notas de piso se generan desde su copia fijada) |
 
 ## Complementos de Obsidian (opcionales, `--with-obsidian`)
 

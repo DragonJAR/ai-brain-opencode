@@ -81,8 +81,10 @@ export default {
       if (!/\.(md|markdown)$/i.test(path)) return
       if (!/(Journals|Notes|CRM|Business|Home|I\+D|Meta)\//.test(path)) return
       if (input.content.trimStart().startsWith("---")) return
-      const d = new Date().toISOString().slice(0, 10)
-      input.content = `---\ntype: note\ncreated: ${d}\n---\n\n` + input.content
+      // tipo derivado de la carpeta (M7) y fecha en la zona horaria del vault (M8)
+      const type = /Journals\//.test(path) ? "journal" : /CRM\//.test(path) ? "person" : "note"
+      const d = new Intl.DateTimeFormat("en-CA", { timeZone: cfg.timezone || "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
+      input.content = `---\ntype: ${type}\ncreated: ${d}\n---\n\n` + input.content
     })
   },
 }

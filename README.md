@@ -22,7 +22,7 @@ No hay base de datos, ni nube obligatoria, ni licencia por puesto.
 ## Instalación
 
 ```bash
-git clone <este-repo> ai-brain-opencode
+clona o copia este paquete donde quieras tenerlo, por ejemplo: ~/ai-brain-opencode
 cd ai-brain-opencode
 bash install.sh ~/ruta/a/mi-cerebro
 ```
@@ -65,10 +65,10 @@ Un solo archivo gobierna el cerebro. El plugin y los trabajos programados lo lee
 {
   "language": "es",
   "timezone": "UTC",   // el instalador lo detecta del sistema
-  "journal": { "time": "16:00", "topics": ["all"], "raw": true, "gratitude": true },
+  "journal": { "time": "20:30", "topics": ["all"], "raw": true, "gratitude": true },
   "habits": ["agua"],
   "accountability": ["sueño"],
-  "schedule": { "journal_time": "16:00", "insights_day": "Sunday" }
+  "schedule": { "insights_day": "Sunday" }
 }
 ```
 

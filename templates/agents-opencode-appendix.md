@@ -1,4 +1,3 @@
----
 ## Adaptación OpenCode (generada por install.sh)
 
 Esta sección la genera el instalador. No la edites a mano: se regenera al re-ejecutar `--wire`.

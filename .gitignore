@@ -1,0 +1,6 @@
+.DS_Store
+*.bak
+.DS_Store
+
+# Lista local de términos a filtrar (NO se distribuye)
+.personal-terms.txt

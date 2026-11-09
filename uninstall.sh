@@ -27,6 +27,7 @@ echo "== Quitando cableado =="
 # Glob SIN barra final: en bash "*/" no matchea symlinks a directorio.
 for l in .opencode/skills/*; do
   [ -L "$l" ] || continue
+  case "$(readlink "$l")" in *ai-brain-starter*) ;; *) continue ;; esac   # nunca borrar symlinks ajenos (M5)
   n="$(basename "$l")"
   if rm -f "$l"; then say "symlink de skill eliminado: $n"; else printf '  ! no se pudo eliminar %s\n' "$n"; fi
 done

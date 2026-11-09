@@ -90,6 +90,17 @@ for f in "$R"/commands/*.md; do
 done
 ok "$(ls -1 "$VAULT/.opencode/commands" | wc -l | tr -d ' ') comandos enlazados"
 
+echo "== 3b. Scripts del vendor que los skills invocan (symlinks a ⚙️ Meta/scripts) =="
+mkdir -p "$VAULT/⚙️ Meta/scripts"
+n_scripts=0
+for f in "$R"/scripts/*.py "$R"/scripts/*.sh; do
+  [ -f "$f" ] || continue
+  n="$(basename "$f")"; l="$VAULT/⚙️ Meta/scripts/$n"
+  if [ -L "$l" ] && [ ! -e "$l" ]; then rm -f "$l"; fi
+  if [ ! -e "$l" ]; then ln -s "../../.opencode/skills/ai-brain-starter/scripts/$n" "$l"; n_scripts=$((n_scripts+1)); fi
+done
+ok "$n_scripts scripts enlazados (build-journal-index, journal-preflight, drift-detection...)"
+
 echo "== 4. humanizer (MIT, lo usa la regla de humanización) =="
 H="$VAULT/.opencode/skills/humanizer"
 if [ ! -e "$H" ]; then git clone -q --depth 1 "$HUMANIZER_REPO" "$H" && ok "humanizer clonado" || warn "humanizer falló (opcional)"; else ok "humanizer presente"; fi

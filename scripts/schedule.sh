@@ -73,15 +73,23 @@ def info(file_path):
 if action == "init":
     if path.exists() or path.is_symlink():
         if path.is_symlink(): raise ValueError("ownership manifest is a symlink")
-        load()
+        data = load()
+        if type(data.get("cron_ownership_version")) is not int or data["cron_ownership_version"] != 2:
+            raise ValueError("legacy or unsupported cron ownership; refusing automatic migration")
     else:
         save({"format": 1, "owner": "ai-brain-opencode", "instance": uuid.uuid4().hex,
+              "cron_ownership_version": 2,
               "files": {}, "symlinks": {}, "config": {}, "cron_lines": [],
               "launch_agents": {}, "trees": {}})
 elif action == "instance":
     print(load()["instance"])
 elif action == "cron-json":
-    print(json.dumps(load()["cron_lines"], ensure_ascii=False, separators=(",", ":")))
+    data = load()
+    if data["cron_lines"] and (type(data.get("cron_ownership_version")) is not int
+                                or data["cron_ownership_version"] != 2):
+        print("legacy or unsupported cron ownership; refusing to trust scheduled entries", file=sys.stderr)
+        sys.exit(2)
+    print(json.dumps(data["cron_lines"], ensure_ascii=False, separators=(",", ":")))
 elif action == "set-cron":
     data = load(); data["cron_lines"] = json.loads(sys.argv[3]); save(data)
 elif action == "clear-cron":
@@ -171,7 +179,14 @@ read_crontab() {
 }
 
 if [ "$MODE" = "--remove" ]; then
-  if ! CRON_JSON="$(owner_manifest cron-json 2>/dev/null)"; then
+  if CRON_JSON="$(owner_manifest cron-json 2>/dev/null)"; then
+    :
+  else
+    manifest_status=$?
+    if [ "$manifest_status" -eq 2 ]; then
+      warn "legacy cron ownership is ambiguous; schedule and manifest were preserved"
+      exit 1
+    fi
     warn "ownership manifest absent or invalid; scheduled artifacts were preserved"
     exit 0
   fi

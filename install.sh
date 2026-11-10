@@ -67,6 +67,8 @@ def load():
             or not isinstance(data.get("instance"), str) or len(data["instance"]) != 32
             or data.get("seal") != seal(data)):
         raise ValueError("ownership manifest failed validation")
+    if type(data.get("cron_ownership_version")) is not int or data["cron_ownership_version"] != 2:
+        raise ValueError("legacy or unsupported cron ownership; refusing automatic migration")
     for key in ("files", "symlinks", "config", "cron_lines", "launch_agents", "trees"):
         if key not in data:
             raise ValueError("ownership manifest is missing " + key)
@@ -148,6 +150,7 @@ if action == "init":
         load()
     else:
         save({"format": 1, "owner": "ai-brain-opencode", "instance": uuid.uuid4().hex,
+              "cron_ownership_version": 2,
               "files": {}, "symlinks": {}, "config": {}, "cron_lines": [],
               "launch_agents": {}, "trees": {}})
 elif action == "instance":

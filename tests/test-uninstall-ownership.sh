@@ -104,7 +104,24 @@ export MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES MOCK_VAULT MOCK
 export PATH="$TMP_ROOT/bin:$PATH"
 export TMPDIR="$TMP_ROOT"
 
+failures=0
 bash "$PKG/install.sh" "$VAULT" --with-mcp --with-schedule > "$TMP_ROOT/install-output.txt"
+if ! grep -F '# ai-brain vault-user owner=' "$MOCK_CRONTAB_STATE" > "$TMP_ROOT/trusted-installed-cron-lines"; then
+  printf 'FAIL: corrected installer did not add owned cron lines\n' >&2
+  failures=$((failures + 1))
+fi
+if ! python3 - "$VAULT/.opencode/brain-vault-install-manifest.json" "$MOCK_CRONTAB_STATE" <<'PY'
+import json, pathlib, sys
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+current = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+assert manifest.get("cron_ownership_version") == 2, "new manifest lacks trusted cron ownership version"
+assert len(manifest["cron_lines"]) == 4, "new manifest did not record all inserted cron lines"
+assert all(line in current for line in manifest["cron_lines"]), "manifest claims a line absent from crontab"
+PY
+then
+  printf 'FAIL: corrected installer did not create a verifiable cron ownership manifest\n' >&2
+  failures=$((failures + 1))
+fi
 
 # Simulate later user edits to files and configuration that the installer created.
 printf '%s\n' 'user-modified job contents' > "$VAULT/scripts/jobs/journal-reminder.sh"
@@ -120,7 +137,6 @@ PY
 
 bash "$PKG/uninstall.sh" "$VAULT" > "$TMP_ROOT/uninstall-output.txt"
 
-failures=0
 expect_exists() {
   if [ ! -e "$1" ] && [ ! -L "$1" ]; then
     printf 'FAIL: expected to preserve %s\n' "$1" >&2
@@ -161,6 +177,13 @@ expect_missing "$VAULT/.opencode/plugins/brain-vault/index.js"
 expect_missing "$VAULT/scripts/jobs/update-brain.sh"
 expect_missing "$VAULT/.opencode/commands/brain-journal.md"
 expect_missing "$VAULT/CLAUDE.md"
+while IFS= read -r installed_line; do
+  [ -n "$installed_line" ] || continue
+  if grep -Fqx -- "$installed_line" "$MOCK_CRONTAB_STATE"; then
+    printf 'FAIL: trusted uninstall left its inserted cron line: %s\n' "$installed_line" >&2
+    failures=$((failures + 1))
+  fi
+done < "$TMP_ROOT/trusted-installed-cron-lines"
 
 if ! python3 - "$VAULT/opencode.json" <<'PY'
 import json, pathlib, sys
@@ -199,6 +222,7 @@ data = {
     "files": {},
     "symlinks": {},
     "config": {},
+    "cron_ownership_version": 2,
     "cron_lines": [],
     "launch_agents": {},
     "trees": {},
@@ -217,6 +241,81 @@ expect_exact_line "$MOCK_CRONTAB_STATE" "$EXACT_LINE"
 bash "$PKG/scripts/schedule.sh" "$EXACT_VAULT" --remove > "$TMP_ROOT/exact-schedule-remove.txt"
 expect_exact_line "$MOCK_CRONTAB_STATE" "$EXACT_LINE"
 expect_exact_line "$MOCK_CRONTAB_STATE" "$UNRELATED_LINE"
+
+# A valid S2 manifest predating cron ownership versioning cannot authorize deletion.
+STALE_VAULT="$TMP_ROOT/stale-s2-manifest-vault"
+STALE_INSTANCE=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+mkdir -p "$STALE_VAULT/.opencode" "$STALE_VAULT/⚙️ Meta"
+cp "$EXACT_VAULT/⚙️ Meta/brain-config.json" "$STALE_VAULT/⚙️ Meta/brain-config.json"
+STALE_DRY_RUN_LINE="$(bash "$PKG/scripts/schedule.sh" "$STALE_VAULT" --dry-run | sed -n '1p')"
+STALE_LINE="${STALE_DRY_RUN_LINE% owner=<dry-run>} owner=$STALE_INSTANCE"
+STALE_UNRELATED_LINE='0 5 * * * echo preserve-stale-fixture'
+printf '%s\n' "$STALE_LINE" "$STALE_UNRELATED_LINE" > "$MOCK_CRONTAB_STATE"
+python3 - "$STALE_VAULT/.opencode/brain-vault-install-manifest.json" "$STALE_INSTANCE" "$STALE_LINE" <<'PY'
+import hashlib, json, pathlib, sys
+
+manifest = pathlib.Path(sys.argv[1])
+data = {
+    "format": 1,
+    "owner": "ai-brain-opencode",
+    "instance": sys.argv[2],
+    "files": {},
+    "symlinks": {},
+    "config": {},
+    "cron_lines": [sys.argv[3]],
+    "launch_agents": {},
+    "trees": {},
+}
+body = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+data["seal"] = hashlib.sha256(body).hexdigest()
+manifest.write_text(json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+cp "$STALE_VAULT/.opencode/brain-vault-install-manifest.json" "$TMP_ROOT/stale-manifest-before-remove"
+cp "$MOCK_CRONTAB_STATE" "$TMP_ROOT/stale-crontab-before-remove"
+cp "$MOCK_CRONTAB_CALLS" "$TMP_ROOT/stale-calls-before-remove"
+cp "$MOCK_CRONTAB_WRITES" "$TMP_ROOT/stale-writes-before-remove"
+if bash "$PKG/scripts/schedule.sh" "$STALE_VAULT" --remove > "$TMP_ROOT/stale-schedule-remove.txt" 2>&1; then
+  printf 'FAIL: pre-versioned S2 manifest was trusted for cron removal\n' >&2
+  failures=$((failures + 1))
+fi
+expect_exact_line "$MOCK_CRONTAB_STATE" "$STALE_LINE"
+expect_exact_line "$MOCK_CRONTAB_STATE" "$STALE_UNRELATED_LINE"
+if ! cmp -s "$STALE_VAULT/.opencode/brain-vault-install-manifest.json" "$TMP_ROOT/stale-manifest-before-remove"; then
+  printf 'FAIL: legacy S2 manifest was changed during fail-closed removal\n' >&2
+  failures=$((failures + 1))
+fi
+if ! cmp -s "$MOCK_CRONTAB_STATE" "$TMP_ROOT/stale-crontab-before-remove"; then
+  printf 'FAIL: legacy S2 removal changed the crontab\n' >&2
+  failures=$((failures + 1))
+fi
+if ! cmp -s "$MOCK_CRONTAB_CALLS" "$TMP_ROOT/stale-calls-before-remove"; then
+  printf 'FAIL: legacy S2 removal queried crontab\n' >&2
+  failures=$((failures + 1))
+fi
+if ! cmp -s "$MOCK_CRONTAB_WRITES" "$TMP_ROOT/stale-writes-before-remove"; then
+  printf 'FAIL: legacy S2 removal invoked the crontab writer\n' >&2
+  failures=$((failures + 1))
+fi
+if bash "$PKG/install.sh" "$STALE_VAULT" --with-schedule > "$TMP_ROOT/stale-install.txt" 2>&1; then
+  printf 'FAIL: installer silently migrated an unversioned S2 manifest\n' >&2
+  failures=$((failures + 1))
+fi
+if ! cmp -s "$STALE_VAULT/.opencode/brain-vault-install-manifest.json" "$TMP_ROOT/stale-manifest-before-remove"; then
+  printf 'FAIL: legacy S2 installer changed the manifest during rejection\n' >&2
+  failures=$((failures + 1))
+fi
+if ! cmp -s "$MOCK_CRONTAB_STATE" "$TMP_ROOT/stale-crontab-before-remove"; then
+  printf 'FAIL: legacy S2 installer changed the crontab\n' >&2
+  failures=$((failures + 1))
+fi
+if ! cmp -s "$MOCK_CRONTAB_CALLS" "$TMP_ROOT/stale-calls-before-remove"; then
+  printf 'FAIL: legacy S2 installer queried crontab\n' >&2
+  failures=$((failures + 1))
+fi
+if ! cmp -s "$MOCK_CRONTAB_WRITES" "$TMP_ROOT/stale-writes-before-remove"; then
+  printf 'FAIL: legacy S2 installer invoked the crontab writer\n' >&2
+  failures=$((failures + 1))
+fi
 
 # Missing ownership metadata must fail closed without querying or writing crontab.
 MISSING_MANIFEST_VAULT="$TMP_ROOT/missing-manifest-vault"

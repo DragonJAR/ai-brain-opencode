@@ -31,6 +31,21 @@ MTIME="$(get 'schedule.maintenance_time' '03:30')"; UTIME="$(get 'schedule.updat
 hm() { echo "$1" | cut -d: -f1; }
 pm() { echo "$1" | cut -d: -f2 | sed 's/^0//'; }
 
+print_cron_jobs() {
+  local marker="$1"
+  printf '%s %s * * 1-5 /bin/bash "%s/journal-reminder.sh" %s\n' "$(hm "$JT")" "$(pm "$JT")" "$J" "$marker"
+  printf '%s %s * * 0 /bin/bash "%s/insights-weekly.sh" %s\n' "$(hm "$ITIME")" "$(pm "$ITIME")" "$J" "$marker"
+  printf '%s %s * * * /bin/bash "%s/daily-maintenance.sh" %s\n' "$(hm "$MTIME")" "$(pm "$MTIME")" "$J" "$marker"
+  printf '%s %s * * 1 /bin/bash "%s/update-brain.sh" %s\n' "$(hm "$UTIME")" "$(pm "$UTIME")" "$J" "$marker"
+}
+
+if [ "$MODE" = "--dry-run" ] && [ "$(uname -s)" != "Darwin" ]; then
+  MARK="# ai-brain $SLUG"
+  echo "$MARK"
+  print_cron_jobs "$MARK"
+  exit 0
+fi
+
 if [ "$MODE" = "--remove" ]; then
   if [ "$(uname -s)" = "Darwin" ]; then
     for j in journal-reminder insights-weekly daily-maintenance update-brain-weekly; do
@@ -76,10 +91,7 @@ else
   MARK="# ai-brain $SLUG"
   crontab -l 2>/dev/null | grep -v "$MARK" > /tmp/ai-brain-cron.$$ || true
   { echo "$MARK"
-    printf '%s %s * * 1-5 /bin/bash "%s/journal-reminder.sh" %s\n' "$(hm "$JT")" "$(pm "$JT")" "$J" "$MARK"
-    printf '%s %s * * 0 /bin/bash "%s/insights-weekly.sh" %s\n' "$(hm "$ITIME")" "$(pm "$ITIME")" "$J" "$MARK"
-    printf '%s %s * * * /bin/bash "%s/daily-maintenance.sh" %s\n' "$(hm "$MTIME")" "$(pm "$MTIME")" "$J" "$MARK"
-    printf '%s %s * * 1 /bin/bash "%s/update-brain.sh" %s\n' "$(hm "$UTIME")" "$(pm "$UTIME")" "$J" "$MARK"
+    print_cron_jobs "$MARK"
   } >> /tmp/ai-brain-cron.$$
   crontab /tmp/ai-brain-cron.$$ && rm -f /tmp/ai-brain-cron.$$ && echo "  + 4 entradas crontab ($MARK)"
 fi

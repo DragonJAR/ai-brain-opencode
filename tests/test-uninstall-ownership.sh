@@ -139,6 +139,12 @@ expect_contains() {
     failures=$((failures + 1))
   fi
 }
+expect_exact_line() {
+  if ! grep -Fqx -- "$2" "$1"; then
+    printf 'FAIL: expected %s to preserve exact line: %s\n' "$1" "$2" >&2
+    failures=$((failures + 1))
+  fi
+}
 
 expect_contains "$MOCK_CRONTAB_STATE" '0 4 * * * echo keep-me # ai-brain vault-user'
 expect_exists "$VAULT/.opencode/skills/personal-link"
@@ -165,6 +171,70 @@ assert servers.get("granola", {}).get("url") == "https://user-modified.invalid/m
 assert "chatprd" not in servers, "unchanged package-added config was not removed"
 PY
 then
+  failures=$((failures + 1))
+fi
+
+# An exact matching line that predates reconciliation is not package-owned.
+EXACT_VAULT="$TMP_ROOT/exact-vault"
+EXACT_INSTANCE=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+mkdir -p "$EXACT_VAULT/.opencode" "$EXACT_VAULT/⚙️ Meta"
+cat > "$EXACT_VAULT/⚙️ Meta/brain-config.json" <<'JSON'
+{
+  "journal": {"time": "20:30"},
+  "schedule": {
+    "insights_time": "21:00",
+    "maintenance_time": "03:30",
+    "update_time": "08:00"
+  }
+}
+JSON
+python3 - "$EXACT_VAULT/.opencode/brain-vault-install-manifest.json" "$EXACT_INSTANCE" <<'PY'
+import hashlib, json, pathlib, sys
+
+manifest = pathlib.Path(sys.argv[1])
+data = {
+    "format": 1,
+    "owner": "ai-brain-opencode",
+    "instance": sys.argv[2],
+    "files": {},
+    "symlinks": {},
+    "config": {},
+    "cron_lines": [],
+    "launch_agents": {},
+    "trees": {},
+}
+body = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+data["seal"] = hashlib.sha256(body).hexdigest()
+manifest.write_text(json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+DRY_RUN_LINE="$(bash "$PKG/scripts/schedule.sh" "$EXACT_VAULT" --dry-run | sed -n '1p')"
+EXACT_LINE="${DRY_RUN_LINE% owner=<dry-run>} owner=$EXACT_INSTANCE"
+UNRELATED_LINE='0 4 * * * echo preserve-this-entry'
+printf '%s\n' "$EXACT_LINE" "$UNRELATED_LINE" > "$MOCK_CRONTAB_STATE"
+expect_exact_line "$MOCK_CRONTAB_STATE" "$EXACT_LINE"
+bash "$PKG/scripts/schedule.sh" "$EXACT_VAULT" > "$TMP_ROOT/exact-schedule-install.txt"
+expect_exact_line "$MOCK_CRONTAB_STATE" "$EXACT_LINE"
+bash "$PKG/scripts/schedule.sh" "$EXACT_VAULT" --remove > "$TMP_ROOT/exact-schedule-remove.txt"
+expect_exact_line "$MOCK_CRONTAB_STATE" "$EXACT_LINE"
+expect_exact_line "$MOCK_CRONTAB_STATE" "$UNRELATED_LINE"
+
+# Missing ownership metadata must fail closed without querying or writing crontab.
+MISSING_MANIFEST_VAULT="$TMP_ROOT/missing-manifest-vault"
+mkdir -p "$MISSING_MANIFEST_VAULT"
+cp "$MOCK_CRONTAB_STATE" "$TMP_ROOT/crontab-before-missing-manifest"
+cp "$MOCK_CRONTAB_CALLS" "$TMP_ROOT/calls-before-missing-manifest"
+cp "$MOCK_CRONTAB_WRITES" "$TMP_ROOT/writes-before-missing-manifest"
+bash "$PKG/scripts/schedule.sh" "$MISSING_MANIFEST_VAULT" --remove > "$TMP_ROOT/missing-manifest-remove.txt" 2>&1
+if ! cmp -s "$MOCK_CRONTAB_STATE" "$TMP_ROOT/crontab-before-missing-manifest"; then
+  printf 'FAIL: missing-manifest removal changed the crontab\n' >&2
+  failures=$((failures + 1))
+fi
+if ! cmp -s "$MOCK_CRONTAB_CALLS" "$TMP_ROOT/calls-before-missing-manifest"; then
+  printf 'FAIL: missing-manifest removal queried crontab\n' >&2
+  failures=$((failures + 1))
+fi
+if ! cmp -s "$MOCK_CRONTAB_WRITES" "$TMP_ROOT/writes-before-missing-manifest"; then
+  printf 'FAIL: missing-manifest removal invoked the crontab writer\n' >&2
   failures=$((failures + 1))
 fi
 

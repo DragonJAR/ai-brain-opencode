@@ -145,7 +145,7 @@ for line in generated_path.read_text(encoding="utf-8").splitlines(keepends=True)
     value = line.rstrip("\r\n")
     if not any(existing.rstrip("\r\n") == value for existing in current):
         current.append(line)
-    owned.append(value)
+        owned.append(value)
 output_path.write_text("".join(current), encoding="utf-8")
 print(json.dumps(owned, ensure_ascii=False, separators=(",", ":")))
 PY

@@ -185,6 +185,8 @@ ai-brain-opencode/
 
 MIT — ver [LICENSE](LICENSE). Terceros conservan sus términos — [NOTICE.md](NOTICE.md).
 
+*Una adaptación a OpenCode V2 de [ai-brain-starter](https://github.com/mycelium-hq/ai-brain-starter) (mycelium-hq).*
+
 **DragonJAR SAS** · [dragonjar.org](https://www.dragonjar.org)
 
 [English](README.md)

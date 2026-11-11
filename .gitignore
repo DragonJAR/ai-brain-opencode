@@ -5,3 +5,6 @@
 __pycache__/
 *.pyc
 .codegraph/
+# Artefactos locales de orquestación (no se distribuyen)
+.atl/
+odd/

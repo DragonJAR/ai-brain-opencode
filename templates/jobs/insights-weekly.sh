@@ -3,6 +3,7 @@
 set -euo pipefail
 VAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$VAULT"
+mkdir -p "$VAULT/⚙️ Meta/logs"
 LOG="$VAULT/⚙️ Meta/logs/insights-weekly.log"
 COUNT=$(find "📓 Journals" -name '*.md' -not -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
 if [ "$COUNT" -lt 1 ]; then echo "$(date '+%F %T') sin entradas; omitido" >> "$LOG"; exit 0; fi

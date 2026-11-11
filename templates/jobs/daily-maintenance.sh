@@ -3,6 +3,7 @@
 set -euo pipefail
 VAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$VAULT"
+mkdir -p "$VAULT/⚙️ Meta/logs"
 LOG="$VAULT/⚙️ Meta/logs/maintenance.log"
 if [ -f "⚙️ Meta/scripts/build-journal-index.py" ]; then
   python3 "⚙️ Meta/scripts/build-journal-index.py" --vault-root . >> "$LOG" 2>&1 || true

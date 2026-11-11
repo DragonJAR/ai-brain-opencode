@@ -3,6 +3,7 @@
 set -euo pipefail
 VAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$VAULT"
+mkdir -p "$VAULT/⚙️ Meta/logs"
 LOG="$VAULT/⚙️ Meta/logs/update.log"
 R="$VAULT/.opencode/skills/ai-brain-starter"
 H="$VAULT/.opencode/skills/humanizer"
@@ -10,5 +11,5 @@ if [ -d "$R/.git" ]; then git -C "$R" pull --ff-only >> "$LOG" 2>&1 || echo "$(d
 if [ -d "$H/.git" ]; then git -C "$H" pull --ff-only >> "$LOG" 2>&1 || echo "$(date '+%F %T') pull humanizer falló" >> "$LOG"; fi
 if [ -f "$R/scripts/generate_floor_stubs.py" ]; then
   python3 "$R/scripts/generate_floor_stubs.py" >> "$LOG" 2>&1 || true
-  cp "$R/floors/"*.md "$VAULT/⚙️ Meta/Floors/" 2>/dev/null || true
+  cp -n "$R/floors/"*.md "$VAULT/⚙️ Meta/Floors/" 2>/dev/null || true
 fi

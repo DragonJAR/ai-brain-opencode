@@ -12,23 +12,43 @@ fail() {
   failures=$((failures + 1))
 }
 
-# The README configuration example must be strict JSON, not JSONC.
+# Bilingual README contract (stricter than the old Spanish-only README.md check):
+# - README.md (English): strict JSON under "## Configuration" + EN scoped-setup phrase
+# - README.es.md (Spanish): strict JSON under "## Configuración" + ES scoped-setup phrase
+if [ ! -f "$PKG/README.es.md" ]; then
+  fail "README.es.md is missing (bilingual contract requires both README.md and README.es.md)"
+fi
 if python3 - "$PKG/README.md" >/dev/null 2>&1 <<'PY'
 import json, pathlib, re, sys
 text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-match = re.search(r"## Configuración:.*?```json\s*\n(.*?)\n```", text, re.S)
+match = re.search(r"^## Configuration\b.*?```json\s*\n(.*?)\n```", text, re.S | re.M)
 if not match:
-    raise SystemExit("README configuration JSON block not found")
+    raise SystemExit("README.md ## Configuration JSON block not found")
 json.loads(match.group(1))
 PY
 then
   :
 else
-  fail "README configuration example does not parse as strict JSON"
+  fail "README.md configuration example does not parse as strict JSON"
 fi
-
-if ! grep -Fq 'No detecta vaults automáticamente ni modifica la configuración global de OpenCode.' "$PKG/README.md"; then
-  fail "README does not state that setup is explicit and project-scoped"
+if python3 - "$PKG/README.es.md" >/dev/null 2>&1 <<'PY'
+import json, pathlib, re, sys
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r"^## Configuración\b.*?```json\s*\n(.*?)\n```", text, re.S | re.M)
+if not match:
+    raise SystemExit("README.es.md ## Configuración JSON block not found")
+json.loads(match.group(1))
+PY
+then
+  :
+else
+  fail "README.es.md configuration example does not parse as strict JSON"
+fi
+if ! grep -Fq 'Does not automatically detect vaults or modify OpenCode global configuration.' "$PKG/README.md"; then
+  fail "README.md does not state that setup is explicit and project-scoped"
+fi
+if ! grep -Fq 'No detecta vaults automáticamente ni modifica la configuración global de OpenCode.' "$PKG/README.es.md"; then
+  fail "README.es.md does not state that setup is explicit and project-scoped"
 fi
 if ! grep -Fq 'no realiza detección global' "$PKG/docs/COMPAT.md"; then
   fail "compatibility guide does not rule out global vault detection"
@@ -198,6 +218,141 @@ fi
 find "$MISSING_VAULT" -mindepth 1 -print | sort > "$TMP_ROOT/no-opencode-after.txt"
 if ! cmp -s "$TMP_ROOT/no-opencode-before.txt" "$TMP_ROOT/no-opencode-after.txt"; then
   fail "installer mutated the vault before reporting missing OpenCode"
+fi
+
+# CLAUDE.md must resolve to AGENTS.md. Any other symlink, a regular file, or absence fails.
+check_claude() {
+  local name="$1"
+  local mode="$2"
+  local root="$TMP_ROOT/claude-$name"
+  mkdir -p "$root/scripts"
+  cp "$PKG/scripts/verify.sh" "$root/scripts/verify.sh"
+  printf 'agents body\n' > "$root/AGENTS.md"
+  case "$mode" in
+    good) ln -s AGENTS.md "$root/CLAUDE.md" ;;
+    wrong)
+      printf 'other\n' > "$TMP_ROOT/other-claude.md"
+      ln -s "$TMP_ROOT/other-claude.md" "$root/CLAUDE.md"
+      ;;
+    file) printf 'regular\n' > "$root/CLAUDE.md" ;;
+    absent) ;;
+  esac
+  set +e
+  "$BASH_BIN" "$root/scripts/verify.sh" > "$TMP_ROOT/claude-$name.txt" 2>&1
+  local status=$?
+  set -e
+  printf '%s\n' "$status" > "$TMP_ROOT/claude-$name.exit"
+}
+
+check_claude good good
+if ! grep -Fq '✓ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-good.txt"; then
+  fail "verifier rejected a CLAUDE.md symlink whose real target is AGENTS.md"
+fi
+check_claude wrong wrong
+if ! grep -Fq '✗ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-wrong.txt"; then
+  fail "verifier accepted a CLAUDE.md symlink that does not resolve to AGENTS.md"
+fi
+if [ "$(cat "$TMP_ROOT/claude-wrong.exit")" -eq 0 ]; then
+  fail "verifier exited 0 when CLAUDE.md pointed elsewhere"
+fi
+check_claude absent absent
+if ! grep -Fq '✗ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-absent.txt"; then
+  fail "verifier accepted a vault without CLAUDE.md"
+fi
+if [ "$(cat "$TMP_ROOT/claude-absent.exit")" -eq 0 ]; then
+  fail "verifier exited 0 when CLAUDE.md was absent"
+fi
+check_claude regular file
+if ! grep -Fq '✗ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-regular.txt"; then
+  fail "verifier accepted a regular CLAUDE.md file"
+fi
+if [ "$(cat "$TMP_ROOT/claude-regular.exit")" -eq 0 ]; then
+  fail "verifier exited 0 when CLAUDE.md was a regular file"
+fi
+
+# insights-weekly must fail visibly when opencode is missing, and run when it is present.
+INSIGHTS_VAULT="$TMP_ROOT/insights-vault"
+INSIGHTS_BIN="$TMP_ROOT/insights-bin"
+mkdir -p "$INSIGHTS_VAULT/scripts/jobs" "$INSIGHTS_VAULT/📓 Journals" "$INSIGHTS_BIN"
+cp "$PKG/templates/jobs/insights-weekly.sh" "$INSIGHTS_VAULT/scripts/jobs/insights-weekly.sh"
+printf '# entrada\n' > "$INSIGHTS_VAULT/📓 Journals/hoy.md"
+set +e
+PATH="$INSIGHTS_BIN:/usr/bin:/bin" "$BASH_BIN" "$INSIGHTS_VAULT/scripts/jobs/insights-weekly.sh" > "$TMP_ROOT/insights-miss.out" 2> "$TMP_ROOT/insights-miss.err"
+insights_miss=$?
+set -e
+if [ "$insights_miss" -eq 0 ]; then
+  fail "insights-weekly exited 0 when opencode was absent"
+fi
+if ! grep -Fq 'opencode no disponible' "$TMP_ROOT/insights-miss.err"; then
+  fail "insights-weekly did not write the missing-opencode error to stderr"
+fi
+cat > "$INSIGHTS_BIN/opencode" <<'SH'
+#!/bin/sh
+printf '%s\n' "$*"
+exit 0
+SH
+chmod +x "$INSIGHTS_BIN/opencode"
+if ! PATH="$INSIGHTS_BIN:/usr/bin:/bin" "$BASH_BIN" "$INSIGHTS_VAULT/scripts/jobs/insights-weekly.sh" > "$TMP_ROOT/insights-ok.out" 2> "$TMP_ROOT/insights-ok.err"; then
+  fail "insights-weekly failed when opencode was on PATH"
+fi
+EMPTY_VAULT="$TMP_ROOT/insights-empty"
+mkdir -p "$EMPTY_VAULT/scripts/jobs" "$EMPTY_VAULT/📓 Journals"
+cp "$PKG/templates/jobs/insights-weekly.sh" "$EMPTY_VAULT/scripts/jobs/insights-weekly.sh"
+if ! PATH="$INSIGHTS_BIN:/usr/bin:/bin" "$BASH_BIN" "$EMPTY_VAULT/scripts/jobs/insights-weekly.sh" > "$TMP_ROOT/insights-empty.out" 2> "$TMP_ROOT/insights-empty.err"; then
+  fail "insights-weekly failed when there were no journal entries"
+fi
+
+# Missing git identity must stop before any vault mutation. The successful install above is the with-identity case.
+NO_IDENT_NEW="$TMP_ROOT/no-ident-new"
+if MOCK_GIT_IDENTITY=missing MOCK_VAULT="$NO_IDENT_NEW" "$BASH_BIN" "$PKG/install.sh" "$NO_IDENT_NEW" > "$TMP_ROOT/no-ident-new.txt" 2>&1; then
+  fail "installer succeeded without git identity"
+fi
+if [ -e "$NO_IDENT_NEW" ]; then
+  fail "missing git identity created a new vault"
+fi
+if ! grep -Fq 'No se modificó el vault' "$TMP_ROOT/no-ident-new.txt" || ! grep -Fq 'identidad' "$TMP_ROOT/no-ident-new.txt"; then
+  fail "missing git identity error did not name the prerequisite and the no-mutation guarantee"
+fi
+NO_IDENT_OLD="$TMP_ROOT/no-ident-existing"
+mkdir -p "$NO_IDENT_OLD"
+printf 'keep\n' > "$NO_IDENT_OLD/keep.txt"
+find "$NO_IDENT_OLD" -print | sort > "$TMP_ROOT/no-ident-existing-before.txt"
+if MOCK_GIT_IDENTITY=missing "$BASH_BIN" "$PKG/install.sh" "$NO_IDENT_OLD" > "$TMP_ROOT/no-ident-existing.txt" 2>&1; then
+  fail "installer succeeded on an existing vault without git identity"
+fi
+find "$NO_IDENT_OLD" -print | sort > "$TMP_ROOT/no-ident-existing-after.txt"
+if ! cmp -s "$TMP_ROOT/no-ident-existing-before.txt" "$TMP_ROOT/no-ident-existing-after.txt"; then
+  fail "missing git identity mutated an existing vault"
+fi
+if ! grep -Fq 'No se modificó el vault' "$TMP_ROOT/no-ident-existing.txt" || ! grep -Fq 'identidad' "$TMP_ROOT/no-ident-existing.txt"; then
+  fail "existing vault without git identity did not name the prerequisite and the no-mutation guarantee"
+fi
+
+# An existing Git repository uses that repo's identity, not only the global one.
+NO_IDENT_REPO="$TMP_ROOT/no-ident-repo"
+mkdir -p "$NO_IDENT_REPO/.git"
+printf 'keep\n' > "$NO_IDENT_REPO/keep.txt"
+find "$NO_IDENT_REPO" -print | sort > "$TMP_ROOT/no-ident-repo-before.txt"
+if MOCK_GIT_IDENTITY=missing "$BASH_BIN" "$PKG/install.sh" "$NO_IDENT_REPO" > "$TMP_ROOT/no-ident-repo.txt" 2>&1; then
+  fail "installer succeeded on an existing git vault without identity"
+fi
+find "$NO_IDENT_REPO" -print | sort > "$TMP_ROOT/no-ident-repo-after.txt"
+if ! cmp -s "$TMP_ROOT/no-ident-repo-before.txt" "$TMP_ROOT/no-ident-repo-after.txt"; then
+  fail "missing git identity mutated an existing git vault"
+fi
+if ! grep -Fq 'identidad' "$TMP_ROOT/no-ident-repo.txt"; then
+  fail "existing git vault without identity did not report the missing identity"
+fi
+
+IDENT_REPO="$TMP_ROOT/ident-repo"
+mkdir -p "$IDENT_REPO/.git"
+printf 'keep\n' > "$IDENT_REPO/keep.txt"
+if ! MOCK_VAULT="$IDENT_REPO" "$BASH_BIN" "$PKG/install.sh" "$IDENT_REPO" > "$TMP_ROOT/ident-repo.txt" 2>&1; then
+  fail "installer rejected an existing git vault that already has identity"
+  cat "$TMP_ROOT/ident-repo.txt" >&2
+fi
+if ! grep -Fq 'identidad git presente' "$TMP_ROOT/ident-repo.txt" || ! grep -Fq 'commit base' "$TMP_ROOT/ident-repo.txt"; then
+  fail "existing git vault with identity did not pass preflight and commit"
 fi
 
 if [ "$failures" -gt 0 ]; then

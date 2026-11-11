@@ -1,145 +1,190 @@
 # ai-brain-opencode
 
-Cerebro personal sobre **[ai-brain-starter](https://github.com/mycelium-hq/ai-brain-starter)**, adaptado a
-**OpenCode V2** en lugar de Claude Code. Un instalador, cero datos personales en el paquete.
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20WSL2-green.svg)](docs/COMPAT.md)
+[![Author](https://img.shields.io/badge/author-DragonJAR%20SAS-orange.svg)](https://www.dragonjar.org)
+[![Español](https://img.shields.io/badge/read%20in-Espa%C3%B1ol-blue.svg)](README.es.md)
 
-Tu vault es una carpeta de markdown en tu disco. La IA la lee, escribe en ella y recuerda lo que escribiste.
-No hay base de datos, ni nube obligatoria, ni licencia por puesto.
+> A personal second brain: a markdown vault on your disk, driven by OpenCode V2—no mandatory cloud, no personal data in the package.
 
----
+## What this is
 
-## Requisitos
+- A **markdown vault on your machine** (journals, notes, CRM, meta)—the AI reads and writes files you own.
+- **OpenCode V2** as the runtime (not Claude Code); see [docs/COMPAT.md](docs/COMPAT.md).
+- One **installer** that clones vendor skills, wires relative symlinks, and installs a project plugin—**no personal data** ships in this repo.
+- **No required database or SaaS**: optional remote MCP only if you pass `--with-mcp`.
 
-| Necesario | Para qué |
+## What gets installed
+
+| In the vault | Purpose |
 |---|---|
-| [OpenCode](https://opencode.ai/docs) con un modelo configurado | el runtime (la IA que lee tu vault) |
-| Git | clonar el starter y el skill humanizer |
-| Python 3.10+ | scripts del diario (índice, preflight) y registro de propiedad |
-| Node 18+ | OpenCode; el plugin se valida con `node --check` si está presente |
-| macOS o Linux | el cerebro usa symlinks POSIX y el scheduler usa launchd (macOS) o cron (Linux) |
-| Obsidian (opcional) | ver el vault con notas enlazadas y Dataview |
+| Folder tree (`📓 Journals/`, `🏠 Home/`, `👤 CRM/`, `📝 Notes/`, `💼 Business/`, `🚀 I+D/`, `⚙️ Meta/`) | Canonical layout for notes and meta |
+| `.opencode/skills/ai-brain-starter/` (+ skill/command symlinks) | Vendor starter clone; skills/commands are relative links |
+| `.opencode/plugins/brain-vault/index.js` | OpenCode plugin (context, close signal, meeting trigger, frontmatter) |
+| `AGENTS.md` (+ `CLAUDE.md` → `AGENTS.md`) | Per-session brain memory; OpenCode reads it each session |
+| `⚙️ Meta/brain-config.json` | Language, timezone, journal time, habits, schedule times |
+| `scripts/verify.sh`, `scripts/lib/ownership.py`, `scripts/jobs/*.sh` | Health check, ownership library, scheduled jobs |
+| `.opencode/brain-vault-install-manifest.json` | Ownership fingerprints for safe uninstall |
+| `opencode.json` | **Only** with `--with-mcp` (remote MCP servers) |
 
-**Windows:** no hay soporte nativo (symlinks POSIX y launchd/cron no existen en Windows). Usa **WSL2 con Ubuntu**
-y ejecuta el instalador dentro de WSL. El instalador rechaza Windows nativo antes de tocar nada y, si detecta WSL,
-te avisa cuando cron no está activo (`sudo service cron start`).
+## Requirements
 
-## Instalación
+| Need | Why |
+|---|---|
+| [OpenCode](https://opencode.ai/docs) with a configured model | Runtime that loads the vault and plugin |
+| Git | Clone starter + humanizer; vault bootstrap commit |
+| Python 3.10+ (`python3` on `PATH`) | Installer, ownership, journal helper scripts (installer checks for `python3`) |
+| Node 18+ (optional) | If present, installer runs `node --check` on the plugin |
+| macOS or Linux (or WSL2 Ubuntu) | POSIX symlinks + launchd/cron |
+| Obsidian (optional) | Browse the vault; `--with-obsidian` installs five community plugins |
+
+## Install
 
 ```bash
-clona o copia este paquete donde quieras tenerlo, por ejemplo: ~/ai-brain-opencode
-cd ai-brain-opencode
-bash install.sh ~/ruta/a/mi-cerebro
+git clone https://github.com/DragonJAR/ai-brain-opencode.git
+cd ai-brain-opencode   # or your local checkout of this package
+bash install.sh ~/path/to/my-brain
 ```
 
-La instalación siempre recibe explícitamente la ruta de un vault. No detecta vaults automáticamente ni modifica la configuración global de OpenCode.
+The vault path is **always explicit**. Does not automatically detect vaults or modify OpenCode global configuration. The installer does not edit `~/.config/opencode/opencode.json`.
 
-Flags:
-
-| Flag | Efecto |
+| Flag | Effect |
 |---|---|
-| `--with-schedule` | instala los trabajos programados (recordatorio del diario, revisión semanal, mantenimiento, actualización) |
-| `--with-obsidian` | instala los 5 complementos comunitarios en el vault |
-| `--with-mcp` | agrega los MCP remotos `granola` y `chatprd` (envían tu conversación cuando los usas: opt-in explícito) |
-| `--config <archivo>` | siembra `⚙️ Meta/brain-config.json` con tus valores (idioma, hora del diario, hábitos) |
-| `--wire` | vuelve a enlazar un vault ya instalado, después de actualizar el starter; no clona, no crea estructura ni modifica configuración o contenido personal. Puede combinarse con `--with-schedule`. |
-| `--yes` | aceptado por compatibilidad: el instalador no hace preguntas |
-| `--help` | muestra la ayuda |
+| `--config <file>` | Seed `⚙️ Meta/brain-config.json` from a JSON file |
+| `--wire` | Re-link an existing vault after starter updates (no clone/scaffold; may combine with `--with-schedule`) |
+| `--with-mcp` | Add remote MCP servers `granola` + `chatprd` into vault `opencode.json` (sends conversation when used—opt-in) |
+| `--with-obsidian` | Install five Obsidian community plugins under `.obsidian/plugins/` |
+| `--with-schedule` | Register scheduled jobs (launchd on macOS, cron on Linux) |
 
-El instalador es **idempotente**: re-ejecutarlo actualiza lo que debe y nunca sobrescribe tu contenido. Cada
-archivo que instala queda registrado en `.opencode/brain-vault-install-manifest.json`; `uninstall.sh` solo borra
-lo que sigue intacto.
+Also accepted: `--help` / `-h`, and `--yes` / `-y` (no prompts; installer is non-interactive).
 
-Actualizar el starter (ff-only, nunca automático):
+Update starter (explicit, never automatic), then re-wire:
 
 ```bash
-BRAIN_STARTER_UPDATE=1 bash install.sh ~/ruta/a/mi-cerebro
-bash install.sh ~/ruta/a/mi-cerebro --wire     # re-enlaza skills y comandos nuevos
+BRAIN_STARTER_UPDATE=1 bash install.sh ~/path/to/my-brain
+bash install.sh ~/path/to/my-brain --wire
 ```
 
-## Qué queda instalado en tu vault
+## Verify
 
-```
-mi-cerebro/
-├── AGENTS.md                  ← memoria del cerebro (la IA la lee cada sesión); CLAUDE.md es un symlink
-├── opencode.json              ← solo con --with-mcp (servidores MCP remotos)
-├── .opencode/
-│   ├── skills/ai-brain-starter/   ← clon local (fuente única; actualización explícita)
-│   ├── skills/<skills>/           ← symlinks al clon (sin copias)
-│   ├── commands/<comandos>/       ← symlinks al clon
-│   └── plugins/brain-vault/       ← hooks de OpenCode (contexto, cierre, frontmatter)
-├── 📓 Journals/  🏠 Home/  👤 CRM/  📝 Notes/
-├── 💼 Business/Engagements/   🚀 I+D/{Herramientas,Investigación}/
-├── ⚙️ Meta/  (Folder Resolvers, Floors, Sessions, Decisions, journal-config, brain-config)
-└── scripts/
-    ├── verify.sh              ← salud del vault (exit 1 si algo falla)
-    ├── lib/ownership.py       ← registro de propiedad compartido
-    └── jobs/                  ← los trabajos programados
+```bash
+bash tests/run.sh                 # package regressions (isolated fixtures)
+bash <vault>/scripts/verify.sh    # vault health: structure, symlinks, config, plugin, ownership
 ```
 
-## Configuración: `⚙️ Meta/brain-config.json`
+`<vault>/scripts/verify.sh` prints `✓` / `✗` and **exits 1** if any check fails. Package tests and vault verify **do not** start OpenCode V2 or prove hooks loaded in a live runtime (`docs/COMPAT.md`). After install: restart OpenCode or run `/reload` so it picks up `.opencode/plugins/`.
 
-Un solo archivo gobierna el cerebro. El plugin y los trabajos programados lo leen (no hay valores duplicados).
-Un valor inválido nunca rompe el sistema: cae al default documentado y avisa.
+## Daily use
+
+The installer copies the plugin to `<vault>/.opencode/plugins/brain-vault/index.js`. OpenCode loads project plugins from `.opencode/plugins/` (and globals from `~/.config/opencode/plugins/`). If the runtime lacks a hook API, the plugin **warns and degrades** (`ctx.session.hook` / `ctx.tool.hook` missing)—it does not crash the session.
+
+| Behavior | Source of truth |
+|---|---|
+| Context rules each turn | `brain-config.json` (`language`, `journal.time`, `timezone`, `habits`, `extra_rules`) |
+| Close-signal cascade | Prompt words like “chao” / “that’s all” (language-aware) |
+| Meeting trigger | Phrases like “just had a meeting” → meeting-todos guidance |
+| Auto frontmatter on new markdown | Folder-based `type:` + `created:` before writes |
+
+## Configuration
+
+Seeded as `⚙️ Meta/brain-config.json` from `templates/brain-config.example.json` (strict JSON, not JSONC):
 
 ```json
 {
   "vault_name": "mi-cerebro",
   "language": "es",
   "timezone": "UTC",
-  "journal": { "time": "20:30", "topics": ["all"], "raw": true, "gratitude": true },
-  "habits": ["agua"],
-  "accountability": ["sueño"],
+  "journal": {
+    "time": "20:30",
+    "topics": [
+      "all"
+    ],
+    "raw": true,
+    "gratitude": true
+  },
+  "habits": [],
+  "accountability": [],
   "extra_rules": [],
-  "schedule": { "insights_time": "21:00", "maintenance_time": "03:30", "update_time": "08:00" }
+  "schedule": {
+    "insights_time": "21:00",
+    "maintenance_time": "03:30",
+    "update_time": "08:00"
+  }
 }
 ```
 
-- `journal.time` y los tres horarios de `schedule` aceptan `HH:MM` (24 h). Los días son fijos: diario de lunes a
-  viernes, revisión el domingo, actualización el lunes.
-- `language` soporta `es` y `en` (cualquier otro valor usa `es`). `timezone` debe ser una zona IANA válida.
-- Tras cambiarlo, re-ejecuta `bash install.sh <vault> --wire --with-schedule` para re-aplicar los horarios.
+## Scheduled jobs
 
-## Verificación
+Defaults from `templates/brain-config.example.json` and `scripts/schedule.sh`:
+
+| Job | Default time | When |
+|---|---|---|
+| `journal-reminder.sh` | `20:30` | Monday–Friday |
+| `insights-weekly.sh` | `21:00` | Sunday |
+| `daily-maintenance.sh` | `03:30` | Every day |
+| `update-brain.sh` | `08:00` | Monday |
 
 ```bash
-bash tests/run.sh            # regresiones del paquete (fixtures aislados)
-bash scripts/verify.sh       # desde el checkout: corre las regresiones
-bash <vault>/scripts/verify.sh   # desde el vault: estructura, symlinks, config, plugin y propiedad
+bash scripts/schedule.sh ~/path/to/my-brain --dry-run   # show jobs; no launchd/cron writes
+bash scripts/schedule.sh ~/path/to/my-brain             # install (requires prior --with-schedule path or this)
+bash scripts/schedule.sh ~/path/to/my-brain --remove    # remove only verified owned entries
 ```
 
-`<vault>/scripts/verify.sh` termina con código 1 y lista los `✗` cuando algo está roto: sirve en CI y en scripts.
-Ninguna de estas pruebas arranca OpenCode V2 ni confirma que un runtime cargue los hooks; esa validación requiere
-un smoke test explícito de runtime.
+On **WSL2**, cron does not start by itself: `sudo service cron start` (installer warns when WSL is detected).
 
-## Primeros pasos
+## Platforms
 
-1. **Reinicia OpenCode** (o `/reload`) para que cargue el plugin.
-2. **Edita `AGENTS.md`** — la sección "Me" es la línea entre una IA genérica y un cerebro que te conoce.
-3. **Esta noche: `/journal`.** Es el hábito que hace que todo lo demás funcione.
-4. **Cierra siempre con una señal de cierre** ("chao", "eso es todo"): el plugin inyecta el cascade que guarda tu sesión.
-
-## Problemas comunes
-
-| Síntoma | Causa y salida |
+| Platform | Support |
 |---|---|
-| `falta OpenCode CLI` | `opencode` no está en `PATH`. Instálalo y vuelve a ejecutar: el vault no se modificó. |
-| `falta crontab` con `--with-schedule` | Linux sin cron instalado. Instala cron o repite sin el flag. |
-| En WSL no corren los trabajos | cron no arranca solo: `sudo service cron start` (o `systemctl enable cron`). |
-| `--wire` se niega | El vault no tiene manifiesto de propiedad o le falta estructura: corre una instalación normal una vez. |
-| `verify.sh` falla en un vault viejo | Falta `scripts/lib/ownership.py` o el manifiesto: re-ejecuta `bash install.sh <vault> --wire`. |
-| `uninstall.sh` no borra `AGENTS.md` | Es contenido tuyo, no maquinaria: se preserva a propósito. |
+| macOS | Full: symlinks + **launchd** |
+| Linux | Full: symlinks + **cron** |
+| WSL2 (Ubuntu) | Supported inside WSL; start **cron** manually |
+| Windows native | **Not supported by design** (POSIX symlinks + launchd/cron). Use WSL2. Installer rejects `MINGW*`/`MSYS*`/`CYGWIN*` before mutating the vault. |
 
-## Desinstalar
+## Uninstall
 
 ```bash
-bash uninstall.sh <ruta-del-vault>                 # quita maquinaria, conserva tu contenido
-bash uninstall.sh <ruta-del-vault> --purge-clones  # además borra los clones vendorizados
+bash uninstall.sh ~/path/to/my-brain
+bash uninstall.sh ~/path/to/my-brain --purge-clones
 ```
 
-Solo elimina artefactos sin cambios registrados por el paquete. Lo modificado, lo que no es del paquete y lo
-ambiguo se preserva y se informa. No toca Git: revisa `git status` en el vault y confirma el cambio tú mismo.
+Removes only **unchanged owned** artifacts from the install manifest. Modified files, foreign symlinks, and ambiguous items are **preserved** and reported. `--purge-clones` also drops verified vendor clones (`ai-brain-starter`, `humanizer`).
 
-## Licencias y atribución
+## Troubleshooting
 
-Este paquete es MIT. El sistema que instala (ai-brain-starter, humanizer, framework High-Rise) es de terceros
-y conserva sus propias licencias — ver `NOTICE.md`.
+| Symptom | Likely cause |
+|---|---|
+| `falta OpenCode CLI` then abort | `opencode` missing from `PATH` (vault untouched) |
+| Jobs never run on WSL2 | Cron inactive → `sudo service cron start` |
+| `archivo modificado o no verificado, preservado` on uninstall | You edited the file, or filesystem mode drift (e.g. DrvFs)—expected safety |
+| `bad interpreter: bash\r` | CRLF checkout; use a Linux filesystem inside WSL2 |
+| Plugin ignores config | Folder named `⚙ Meta` (no VS16) ≠ `⚙️ Meta` |
+| `refusing to modify a symlinked… opencode.json` / missing git identity | Regular `opencode.json` required for `--with-mcp`; set `user.name` / `user.email` before install |
+
+## Privacy
+
+- No operator personal data in the package; run `bash scripts/check-personal-data.sh`.
+- MCP remotes are **opt-in** (`--with-mcp`) and send conversation content when those servers are used.
+- Your vault content stays on disk under the path you pass to `install.sh`.
+
+## Structure
+
+```
+ai-brain-opencode/
+├── install.sh · uninstall.sh
+├── plugin/brain-vault/index.js
+├── scripts/{schedule,verify,check-personal-data}.sh
+├── scripts/lib/ownership.py
+├── templates/brain-config.example.json
+├── templates/jobs/*.sh
+├── tests/run.sh
+└── docs/COMPAT.md
+```
+
+## License + Author
+
+MIT — see [LICENSE](LICENSE). Third-party systems keep their own terms — [NOTICE.md](NOTICE.md).
+
+**DragonJAR SAS** · [dragonjar.org](https://www.dragonjar.org)
+
+[Español](README.es.md)

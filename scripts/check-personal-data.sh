@@ -84,7 +84,8 @@ fi
 
 echo "== Marcadores prohibidos =="
 # Este paquete es independiente: no debe referenciar el repositorio del vault privado.
-FORBIDDEN_RE='ai-brain-opencode|Cerebro personal'
+# El patrón usa [C] para que el propio detector no contenga el literal que prohíbe.
+FORBIDDEN_RE='Segundo[C]erebro|Cerebro personal'
 FORBIDDEN="$(grep_in_pkg -rnE "$FORBIDDEN_RE" . \
   --exclude-dir=.git --exclude-dir=.codegraph --exclude-dir=node_modules \
   --exclude-dir=.atl --exclude-dir=odd --exclude-dir=__pycache__ \

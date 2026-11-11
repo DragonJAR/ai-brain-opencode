@@ -5,10 +5,13 @@
 #   bash install.sh <ruta-del-vault> [flags]
 # Flags:
 #   --config <archivo>   brain-config.json para sembrar (por defecto: valores incluidos)
-#   --wire               solo re-ejecuta el cableado en un vault existente (ruta de actualización)
+#   --wire               solo re-cablea un vault existente (ruta de actualización)
 #   --with-mcp           agrega los MCP remotos granola + chatprd (opt-in: envían tu conversación cuando los usas)
 #   --with-obsidian      instala los complementos de Obsidian en el vault
 #   --with-schedule      instala los trabajos programados (launchd en macOS, cron en Linux)
+#   --yes, -y            aceptado por compatibilidad; el instalador no hace preguntas
+#   --help, -h           muestra esta ayuda
+# Requisitos: macOS o Linux (en Windows usa WSL2), OpenCode CLI, git, python3.
 # Idempotente: re-ejecutar es seguro; el contenido personal nunca se sobrescribe.
 set -euo pipefail
 
@@ -18,174 +21,103 @@ HUMANIZER_REPO="https://github.com/adelaidasofia/humanizer.git"
 OS="$(uname -s)"
 VAULT="" CONFIG="" WIRE=0 WITH_MCP=0 WITH_OBSIDIAN=0 WITH_SCHEDULE=0
 
-say()  { printf '%s\n' "$*"; }
 ok()   { printf '  + %s\n' "$*"; }
 warn() { printf '  ! %s\n' "$*"; }
 die()  { printf '  ✗ %s\n' "$*" >&2; exit 1; }
+usage() { sed -n '2,/^set -/p' "$0" | sed '$d'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --config) [ $# -ge 2 ] || die "--config requiere la ruta de un brain-config.json"; CONFIG="$2"; shift 2 ;;
-    --wire) WIRE=1; shift ;;   # re-cablea: el instalador es idempotente
-    --yes|-y) shift ;;   # aceptado sin efecto; esta versión no hace prompts interactivos
+    --wire) WIRE=1; shift ;;
+    --yes|-y) shift ;;
     --with-mcp) WITH_MCP=1; shift ;;
     --with-obsidian) WITH_OBSIDIAN=1; shift ;;
     --with-schedule) WITH_SCHEDULE=1; shift ;;
-    --help|-h) sed -n '2,14p' "$0"; exit 0 ;;
+    --help|-h) usage; exit 0 ;;
+    -*) die "flag desconocida: $1 (usa --help)";;
     *) if [ -z "$VAULT" ]; then VAULT="$1"; else die "argumento inesperado: $1"; fi; shift ;;
   esac
 done
-[ -n "$VAULT" ] || { sed -n '2,14p' "$0"; exit 1; }
-mkdir -p "$VAULT"
+[ -n "$VAULT" ] || { usage >&2; exit 1; }
+if [ "$WIRE" = 1 ]; then
+  [ -d "$VAULT" ] || die "--wire requiere la ruta de un vault existente"
+  if [ -n "$CONFIG" ] || [ "$WITH_MCP" = 1 ] || [ "$WITH_OBSIDIAN" = 1 ]; then
+    die "--wire solo admite --with-schedule; no aplica configuración ni instala complementos"
+  fi
+fi
+
+echo "== 0. Preflight =="
+case "$OS" in
+  Darwin) ok "macOS detectado (scheduler: launchd)" ;;
+  Linux)  ok "Linux detectado (scheduler: cron)" ;;
+  MINGW*|MSYS*|CYGWIN*)
+    die "Windows nativo no está soportado: el cerebro usa symlinks y launchd/cron. Usa WSL2 (Ubuntu) y ejecuta el instalador dentro de WSL. No se modificó el vault" ;;
+  *) die "plataforma no soportada ($OS): se requiere macOS o Linux. En Windows usa WSL2. No se modificó el vault" ;;
+esac
+if [ "$OS" = "Linux" ] && { [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; }; then
+  warn "WSL2 detectado: cron no arranca solo; actívalo con 'sudo service cron start' para que --with-schedule funcione"
+fi
+if [ "$WITH_OBSIDIAN" = 1 ]; then
+  case "$OS" in Darwin|Linux) ;; *) die "--with-obsidian soporta macOS/Linux" ;; esac
+fi
+if [ -n "$CONFIG" ]; then
+  [ -f "$CONFIG" ] || die "--config: no existe $CONFIG"
+  CONFIG_ERROR="$(python3 - "$CONFIG" 2>&1 <<'PY'
+import json, sys
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception as error:
+    raise SystemExit("no es JSON válido: " + str(error))
+if not isinstance(data, dict):
+    raise SystemExit("debe ser un objeto JSON (clave/valor)")
+PY
+)" || die "--config: $CONFIG $CONFIG_ERROR"
+  ok "config válida: $CONFIG"
+fi
+for cmd in git python3; do command -v "$cmd" >/dev/null || die "falta $cmd (requerido)"; done
+command -v opencode >/dev/null || die "falta OpenCode CLI (requerido); instálalo antes de continuar. No se modificó el vault"
+ok "opencode CLI presente"
+if command -v node >/dev/null; then ok "node presente"; else warn "node no encontrado (opcional: validación de sintaxis del plugin)"; fi
+if [ "$WITH_SCHEDULE" = 1 ] && [ "$OS" = "Linux" ]; then
+  command -v crontab >/dev/null || die "falta crontab (lo requiere --with-schedule en Linux); instala cron o ejecuta sin --with-schedule. No se modificó el vault"
+fi
+
+if [ "$WIRE" = 0 ]; then mkdir -p "$VAULT"; fi
 VAULT="$(cd "$VAULT" && pwd)"
 SLUG="$(basename "$VAULT" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//')"
 SLUG="${SLUG:-cerebro}"
-for rel in ".opencode" ".opencode/skills" ".opencode/skills/ai-brain-starter" \
-           ".opencode/commands" ".opencode/plugins" "scripts" "scripts/jobs" "⚙️ Meta" "⚙️ Meta/scripts"; do
-  [ -L "$VAULT/$rel" ] && die "ruta base es un symlink; se preservó el vault: $rel"
-done
 R="$VAULT/.opencode/skills/ai-brain-starter"
 MANIFEST="$VAULT/.opencode/brain-vault-install-manifest.json"
 STARTER_CREATED=0
 HUMANIZER_CREATED=0
+for rel in ".opencode" ".opencode/skills" ".opencode/skills/ai-brain-starter" \
+           ".opencode/commands" ".opencode/plugins" "scripts" "scripts/jobs" "⚙️ Meta" "⚙️ Meta/scripts"; do
+  [ -L "$VAULT/$rel" ] && die "ruta base es un symlink; se preservó el vault: $rel"
+done
+
+if [ "$WIRE" = 1 ]; then
+  for rel in ".opencode/skills" ".opencode/commands" ".opencode/plugins" "scripts" "scripts/jobs" "⚙️ Meta" "⚙️ Meta/scripts"; do
+    [ -d "$VAULT/$rel" ] || die "--wire requiere la estructura existente; falta $rel"
+  done
+  [ -f "$MANIFEST" ] || die "--wire requiere un manifiesto de propiedad existente; no se creó ni migró"
+  [ -f "$R/SKILL.md" ] && [ -d "$R/skills" ] && [ -d "$R/commands" ] && [ -d "$R/scripts" ] \
+    || die "--wire requiere un starter existente y válido en $R"
+  [ -f "$VAULT/AGENTS.md" ] || die "--wire requiere AGENTS.md existente; no se regenera el vault"
+  [ -f "$VAULT/⚙️ Meta/brain-config.json" ] || die "--wire requiere ⚙️ Meta/brain-config.json existente"
+  python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$VAULT/⚙️ Meta/brain-config.json" 2>/dev/null \
+    || die "--wire requiere una configuración JSON válida"
+fi
+
+OWNERSHIP="$PKG/scripts/lib/ownership.py"
+
+[ -f "$OWNERSHIP" ] || die "paquete incompleto: falta scripts/lib/ownership.py"
 
 owner_manifest() {
-  python3 - "$MANIFEST" "$@" <<'PY'
-import hashlib, json, os, pathlib, stat, sys, uuid
-
-manifest_path = pathlib.Path(sys.argv[1])
-action = sys.argv[2]
-
-def seal(data):
-    body = {key: value for key, value in data.items() if key != "seal"}
-    raw = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
-
-def load():
-    data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if (data.get("format") != 1 or data.get("owner") != "ai-brain-opencode"
-            or not isinstance(data.get("instance"), str) or len(data["instance"]) != 32
-            or data.get("seal") != seal(data)):
-        raise ValueError("ownership manifest failed validation")
-    if type(data.get("cron_ownership_version")) is not int or data["cron_ownership_version"] != 2:
-        raise ValueError("legacy or unsupported cron ownership; refusing automatic migration")
-    for key in ("files", "symlinks", "config", "cron_lines", "launch_agents", "trees"):
-        if key not in data:
-            raise ValueError("ownership manifest is missing " + key)
-    if (not all(isinstance(data[key], dict) for key in ("files", "symlinks", "config", "launch_agents", "trees"))
-            or not isinstance(data["cron_lines"], list)):
-        raise ValueError("ownership manifest has invalid record collections")
-    return data
-
-def save(data):
-    data["seal"] = seal(data)
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    temp = manifest_path.with_name(manifest_path.name + ".tmp." + str(os.getpid()))
-    temp.write_text(json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.chmod(temp, 0o600)
-    os.replace(temp, manifest_path)
-
-def relative(value):
-    path = pathlib.PurePosixPath(value)
-    if path.is_absolute() or ".." in path.parts or str(path) != value:
-        raise ValueError("ownership paths must be normalized vault-relative paths")
-    return value
-
-def file_info(path):
-    target = pathlib.Path(path)
-    if target.is_symlink() or not target.is_file():
-        raise ValueError("owned file is not a regular file")
-    st = target.stat()
-    return {
-        "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
-        "mode": stat.S_IMODE(st.st_mode),
-        "nlink": st.st_nlink,
-    }
-
-def tree_hash(path):
-    root = pathlib.Path(path)
-    digest = hashlib.sha256()
-    root_stat = root.lstat()
-    digest.update(b"ROOT\0" + str(stat.S_IFMT(root_stat.st_mode)).encode() + b":"
-                  + str(stat.S_IMODE(root_stat.st_mode)).encode() + b":"
-                  + str(root_stat.st_nlink).encode() + b"\0")
-    for base, dirs, files in os.walk(root, followlinks=False):
-        dirs.sort(); files.sort()
-        base_path = pathlib.Path(base)
-        for name in list(dirs):
-            item = base_path / name
-            rel = item.relative_to(root).as_posix()
-            item_stat = item.lstat()
-            metadata = (str(stat.S_IFMT(item_stat.st_mode)) + ":"
-                        + str(stat.S_IMODE(item_stat.st_mode)) + ":"
-                        + str(item_stat.st_nlink)).encode()
-            if stat.S_ISLNK(item_stat.st_mode):
-                digest.update(b"L\0" + rel.encode() + b"\0" + metadata + b"\0" + os.readlink(item).encode() + b"\0")
-                dirs.remove(name)
-            elif stat.S_ISDIR(item_stat.st_mode):
-                digest.update(b"D\0" + rel.encode() + b"\0" + metadata + b"\0")
-            else:
-                digest.update(b"E\0" + rel.encode() + b"\0" + metadata + b"\0")
-                dirs.remove(name)
-        for name in files:
-            item = base_path / name
-            rel = item.relative_to(root).as_posix()
-            item_stat = item.lstat()
-            metadata = (str(stat.S_IFMT(item_stat.st_mode)) + ":"
-                        + str(stat.S_IMODE(item_stat.st_mode)) + ":"
-                        + str(item_stat.st_nlink)).encode()
-            if stat.S_ISLNK(item_stat.st_mode):
-                digest.update(b"L\0" + rel.encode() + b"\0" + metadata + b"\0" + os.readlink(item).encode() + b"\0")
-            elif stat.S_ISREG(item_stat.st_mode):
-                digest.update(b"F\0" + rel.encode() + b"\0" + metadata + b"\0")
-                digest.update(hashlib.sha256(item.read_bytes()).digest())
-            else:
-                digest.update(b"E\0" + rel.encode() + b"\0" + metadata + b"\0")
-    return digest.hexdigest()
-
-if action == "init":
-    if manifest_path.exists() or manifest_path.is_symlink():
-        if manifest_path.is_symlink():
-            raise ValueError("ownership manifest is a symlink; refusing to follow it")
-        load()
-    else:
-        save({"format": 1, "owner": "ai-brain-opencode", "instance": uuid.uuid4().hex,
-              "cron_ownership_version": 2,
-              "files": {}, "symlinks": {}, "config": {}, "cron_lines": [],
-              "launch_agents": {}, "trees": {}})
-elif action == "instance":
-    print(load()["instance"])
-elif action == "file-matches":
-    data = load(); path = relative(sys.argv[3]); actual = file_info(sys.argv[4])
-    if data["files"].get(path) != actual: sys.exit(1)
-elif action == "record-file":
-    data = load(); path = relative(sys.argv[3]); data["files"][path] = file_info(sys.argv[4]); save(data)
-elif action == "link-matches":
-    data = load(); path = relative(sys.argv[3]); target = sys.argv[4]
-    if data["symlinks"].get(path) != target or not pathlib.Path(sys.argv[5]).is_symlink(): sys.exit(1)
-    if os.readlink(sys.argv[5]) != target: sys.exit(1)
-elif action == "record-link":
-    data = load(); path = relative(sys.argv[3]); target = os.readlink(sys.argv[4])
-    data["symlinks"][path] = target; save(data)
-elif action == "record-config":
-    data = load(); added = json.loads(sys.argv[3])
-    for name, value in added.items(): data["config"]["opencode.json:mcp.servers." + name] = value
-    save(data)
-elif action == "record-tree":
-    data = load(); path = relative(sys.argv[3]); data["trees"][path] = tree_hash(sys.argv[4]); save(data)
-elif action == "agent-matches":
-    data = load(); path = sys.argv[3]; entry = data["launch_agents"].get(path)
-    if entry is None or not pathlib.Path(path).is_file() or pathlib.Path(path).is_symlink(): sys.exit(1)
-    if entry.get("file") != file_info(path): sys.exit(1)
-elif action == "record-agent":
-    data = load(); path = sys.argv[3]; label = sys.argv[4]
-    data["launch_agents"][path] = {"label": label, "file": file_info(path)}; save(data)
-else:
-    raise ValueError("unknown ownership action: " + action)
-PY
+  python3 "$OWNERSHIP" "$MANIFEST" "$@"
 }
 
-mkdir -p "$(dirname "$MANIFEST")"
+if [ "$WIRE" = 0 ]; then mkdir -p "$(dirname "$MANIFEST")"; fi
 owner_manifest init || die "el registro de propiedad existe pero no es válido; se preservó el vault"
 
 safe_parent() {
@@ -217,8 +149,9 @@ ensure_vault_dir() {
 }
 
 managed_copy() {
-  local src="$1" dst="$2" rel="$3"
+  local src="$1" dst="$2" rel="$3" mode="${4:-}"
   MANAGED_COPY_RESULT=0
+  [ -f "$src" ] || die "falta $src en el paquete; instalación abortada sin cambios posteriores"
   if ! safe_parent "$dst"; then
     warn "directorio padre symlink preservado: $rel"
     return 0
@@ -235,8 +168,17 @@ managed_copy() {
     fi
   fi
   cp "$src" "$dst"
+  if [ -n "$mode" ]; then chmod "$mode" "$dst"; fi
   owner_manifest record-file "$rel" "$dst" || die "no se pudo registrar la propiedad de $rel"
   MANAGED_COPY_RESULT=1
+}
+
+# Symlink records are batched: one manifest write per phase instead of one per link.
+PENDING_LINKS=()
+flush_links() {
+  [ "${#PENDING_LINKS[@]}" -eq 0 ] && return 0
+  owner_manifest record-links "${PENDING_LINKS[@]}" || die "no se pudo registrar la propiedad de los symlinks"
+  PENDING_LINKS=()
 }
 
 managed_link() {
@@ -254,39 +196,33 @@ managed_link() {
     return 0
   fi
   ln -s "$target" "$dst"
-  owner_manifest record-link "$rel" "$dst" || die "no se pudo registrar la propiedad del symlink $rel"
+  PENDING_LINKS+=("$rel" "$dst")
 }
 
-echo "== 0. Preflight =="
-if [ -n "$CONFIG" ]; then
-  [ -f "$CONFIG" ] || die "--config: no existe $CONFIG"
-  python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$CONFIG" 2>/dev/null || die "--config: $CONFIG no es JSON válido"
-  ok "config válida: $CONFIG"
-fi
-for cmd in git python3; do command -v $cmd >/dev/null || die "falta $cmd (requerido)"; done
-command -v opencode >/dev/null && ok "opencode CLI presente" || warn "opencode CLI no está en PATH (instálalo desde https://opencode.ai/docs) — el vault se instala igual"
-command -v node >/dev/null && ok "node presente" || warn "node no encontrado (opcional: validación de sintaxis del plugin)"
-[ "$OS" = "Darwin" ] && ok "macOS detectado (scheduler: launchd)" || { [ "$OS" = "Linux" ] && ok "Linux detectado (scheduler: cron)"; } || true
-if [ "$WITH_OBSIDIAN" = 1 ] && [ "$OS" != "Darwin" ] && [ "$OS" != "Linux" ]; then die "--with-obsidian soporta macOS/Linux"; fi
-
 echo "== 1. Carpetas canónicas del vault =="
-for d in "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "💼 Business/Engagements" "🚀 I+D/Herramientas" "🚀 I+D/Investigación" \
-         "⚙️ Meta/Folder Resolvers" "⚙️ Meta/scripts" "⚙️ Meta/Sessions" "⚙️ Meta/Decisions" "⚙️ Meta/Workflows" \
-         "⚙️ Meta/Facts" "⚙️ Meta/Exceptions" "⚙️ Meta/Floors" "⚙️ Meta/logs" ".opencode/commands" ".opencode/plugins"; do
-  if ! ensure_vault_dir "$d"; then
-    warn "directorio symlink o ruta incompatible preservada: $d"
-    continue
-  fi
-  if [ -L "$VAULT/$d/.gitkeep" ]; then
-    warn "symlink .gitkeep preservado: $d/.gitkeep"
-  elif [ ! -f "$VAULT/$d/.gitkeep" ]; then
-    : > "$VAULT/$d/.gitkeep"
-  fi
-done
-ok "estructura creada"
+if [ "$WIRE" = 0 ]; then
+  for d in "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "💼 Business/Engagements" "🚀 I+D/Herramientas" "🚀 I+D/Investigación" \
+           "⚙️ Meta/Folder Resolvers" "⚙️ Meta/scripts" "⚙️ Meta/Sessions" "⚙️ Meta/Decisions" "⚙️ Meta/Workflows" \
+           "⚙️ Meta/Facts" "⚙️ Meta/Exceptions" "⚙️ Meta/Floors" "⚙️ Meta/logs" ".opencode/commands" ".opencode/plugins"; do
+    if ! ensure_vault_dir "$d"; then
+      warn "directorio symlink o ruta incompatible preservada: $d"
+      continue
+    fi
+    if [ -L "$VAULT/$d/.gitkeep" ]; then
+      warn "symlink .gitkeep preservado: $d/.gitkeep"
+    elif [ ! -f "$VAULT/$d/.gitkeep" ]; then
+      : > "$VAULT/$d/.gitkeep"
+    fi
+  done
+  ok "estructura creada"
+else
+  ok "estructura existente preservada (--wire)"
+fi
 
 echo "== 2. Clonar/actualizar ai-brain-starter (fuente única) =="
-if [ -f "$R/.git/HEAD" ]; then
+if [ "$WIRE" = 1 ]; then
+  ok "starter existente; --wire no clona ni actualiza"
+elif [ -f "$R/.git/HEAD" ]; then
   if [ "${BRAIN_STARTER_UPDATE:-}" = "1" ]; then
     git -C "$R" pull --ff-only >/dev/null 2>&1 && ok "starter actualizado (ff-only)" || warn "pull falló: se usa la versión local"
   else
@@ -295,7 +231,16 @@ if [ -f "$R/.git/HEAD" ]; then
 else
   git clone -q --depth 1 "$STARTER_REPO" "$R" || die "no se pudo clonar $STARTER_REPO"
   STARTER_CREATED=1
-  if [ -n "${BRAIN_STARTER_PIN:-}" ]; then git -C "$R" checkout -q "$BRAIN_STARTER_PIN" && ok "starter en el SHA fijado"; else ok "starter clonado ($(git -C "$R" log --oneline -1 | cut -c1-8))"; fi
+  if [ -n "${BRAIN_STARTER_PIN:-}" ]; then
+    if git -C "$R" fetch -q --depth 1 origin "$BRAIN_STARTER_PIN" 2>/dev/null \
+       && git -C "$R" checkout -q "$BRAIN_STARTER_PIN" 2>/dev/null; then
+      ok "starter en el SHA fijado ($BRAIN_STARTER_PIN)"
+    else
+      die "no se pudo fijar BRAIN_STARTER_PIN=$BRAIN_STARTER_PIN (SHA inexistente o red); borra $R y reintenta"
+    fi
+  else
+    ok "starter clonado ($(git -C "$R" log --oneline -1 | cut -c1-8))"
+  fi
 fi
 [ -f "$R/SKILL.md" ] || die "el clon no tiene SKILL.md — revisa $R"
 
@@ -305,12 +250,14 @@ for d in "$R"/skills/*/; do
   l="$VAULT/.opencode/skills/$n"
   managed_link "ai-brain-starter/skills/$n" "$l" ".opencode/skills/$n"
 done
+flush_links
 ok "$(find "$VAULT/.opencode/skills" -maxdepth 1 -mindepth 1 | wc -l | tr -d ' ') skills enlazadas"
 mkdir -p "$VAULT/.opencode/commands"
 for f in "$R"/commands/*.md; do
   n="$(basename "$f")"; l="$VAULT/.opencode/commands/$n"
   managed_link "../skills/ai-brain-starter/commands/$n" "$l" ".opencode/commands/$n"
 done
+flush_links
 ok "$(ls -1 "$VAULT/.opencode/commands" | wc -l | tr -d ' ') comandos enlazados"
 
 echo "== 3b. Scripts del vendor que los skills invocan (symlinks a ⚙️ Meta/scripts) =="
@@ -322,26 +269,35 @@ for f in "$R"/scripts/*.py "$R"/scripts/*.sh; do
   managed_link "../../.opencode/skills/ai-brain-starter/scripts/$n" "$l" "⚙️ Meta/scripts/$n"
   [ -L "$l" ] && [ "$(readlink "$l")" = "../../.opencode/skills/ai-brain-starter/scripts/$n" ] && n_scripts=$((n_scripts+1))
 done
+flush_links
 ok "$n_scripts scripts enlazados (build-journal-index, journal-preflight, drift-detection...)"
 
 echo "== 4. humanizer (MIT, lo usa la regla de humanización) =="
 H="$VAULT/.opencode/skills/humanizer"
-if [ ! -e "$H" ] && [ ! -L "$H" ]; then
+if [ "$WIRE" = 1 ]; then
+  ok "humanizer preservado (--wire no instala dependencias)"
+elif [ ! -e "$H" ] && [ ! -L "$H" ]; then
   if git clone -q --depth 1 "$HUMANIZER_REPO" "$H"; then HUMANIZER_CREATED=1; ok "humanizer clonado"; else warn "humanizer falló (opcional)"; fi
 else
   ok "humanizer presente"
 fi
 
 echo "== 5. Pisos emocionales (generados desde el framework High-Rise del vendor) =="
-python3 "$R/scripts/generate_floor_stubs.py" >/dev/null 2>&1 && ok "stubs generados en el clon" || warn "generador de pisos falló"
-if [ "$STARTER_CREATED" = 1 ]; then owner_manifest record-tree ".opencode/skills/ai-brain-starter" "$R" || warn "no se pudo registrar el clon del starter"; fi
-if [ "$HUMANIZER_CREATED" = 1 ]; then owner_manifest record-tree ".opencode/skills/humanizer" "$H" || warn "no se pudo registrar el clon de humanizer"; fi
-if [ -d "$R/floors" ]; then
-  cp -n "$R/floors/"*.md "$VAULT/⚙️ Meta/Floors/" 2>/dev/null && ok "$(ls -1 "$VAULT/⚙️ Meta/Floors" | wc -l | tr -d ' ') notas de piso"
+if [ "$WIRE" = 0 ]; then
+  python3 "$R/scripts/generate_floor_stubs.py" >/dev/null 2>&1 && ok "stubs generados en el clon" || warn "generador de pisos falló"
+  if [ "$STARTER_CREATED" = 1 ]; then owner_manifest record-tree ".opencode/skills/ai-brain-starter" "$R" || warn "no se pudo registrar el clon del starter"; fi
+  if [ "$HUMANIZER_CREATED" = 1 ]; then owner_manifest record-tree ".opencode/skills/humanizer" "$H" || warn "no se pudo registrar el clon de humanizer"; fi
+  if [ -d "$R/floors" ]; then
+    cp -n "$R/floors/"*.md "$VAULT/⚙️ Meta/Floors/" 2>/dev/null && ok "$(ls -1 "$VAULT/⚙️ Meta/Floors" | wc -l | tr -d ' ') notas de piso"
+  fi
+else
+  ok "pisos y datos personales preservados (--wire)"
 fi
 
 echo "== 6. Configuración del diario (plantilla del vendor, sin sobrescribir) =="
-if [ ! -f "$VAULT/⚙️ Meta/journal-config.md" ] && [ -f "$R/templates/journal-config.md" ]; then
+if [ "$WIRE" = 1 ]; then
+  ok "journal-config.md preservado (--wire)"
+elif [ ! -f "$VAULT/⚙️ Meta/journal-config.md" ] && [ -f "$R/templates/journal-config.md" ]; then
   cp "$R/templates/journal-config.md" "$VAULT/⚙️ Meta/journal-config.md" && ok "journal-config.md creado"
 else
   ok "journal-config.md presente"
@@ -349,7 +305,9 @@ fi
 
 echo "== 7. brain-config.json (valores del cerebro; el plugin lo lee) =="
 BRC="$VAULT/⚙️ Meta/brain-config.json"
-if [ -n "$CONFIG" ]; then
+if [ "$WIRE" = 1 ]; then
+  ok "brain-config.json preservado (--wire)"
+elif [ -n "$CONFIG" ]; then
   [ -f "$CONFIG" ] || die "no existe --config: $CONFIG"
   if [ -f "$BRC" ]; then cp "$BRC" "$BRC.bak.$(date +%Y%m%d-%H%M%S)" && warn "backup de la config previa"; fi
   cp "$CONFIG" "$BRC" && ok "config sembrada desde $CONFIG"
@@ -375,7 +333,9 @@ else
 fi
 
 echo "== 8. AGENTS.md (template del vendor + adaptación OpenCode) =="
-if [ -f "$VAULT/AGENTS.md" ]; then
+if [ "$WIRE" = 1 ]; then
+  ok "AGENTS.md preservado (--wire)"
+elif [ -f "$VAULT/AGENTS.md" ]; then
   ok "AGENTS.md existe — preservado (nunca se sobrescribe contenido personal)"
 else
   python3 - "$R/templates/generated/claude-md-template.md" "$PKG/templates/agents-opencode-appendix.md" "$BRC" "$VAULT/AGENTS.md" <<'PYGEN'
@@ -383,7 +343,23 @@ import json, pathlib, re, sys
 tpl = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
 app = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
 cfg = json.load(open(sys.argv[3], encoding="utf-8"))
+if not isinstance(cfg, dict):
+    cfg = {}
 out = pathlib.Path(sys.argv[4])
+
+def section(name):
+    value = cfg.get(name)
+    return value if isinstance(value, dict) else {}
+
+def text(value, default):
+    return value.strip() if isinstance(value, str) and value.strip() else default
+
+def words(value):
+    if not isinstance(value, list):
+        return ""
+    return ", ".join(item.strip() for item in value if isinstance(item, str) and item.strip())
+
+journal, schedule = section("journal"), section("schedule")
 src = tpl.replace("~/.claude/skills/humanizer", ".opencode/skills/humanizer")
 src = src.replace("~/.claude/skills/ai-brain-starter", ".opencode/skills/ai-brain-starter")
 src = re.sub(r"8\. \*\*Your brain lives in the vault.*?(?=\n\n9\. )",
@@ -406,14 +382,17 @@ vault_map = """Carpetas del vault (adaptación OpenCode). Los nombres van en ing
 Antes de crear cualquier cosa: revisa este mapa y ⚙️ Meta/Folder Resolvers/."""
 src = re.sub(r"## Vault Map\n\[FILL THIS IN.*?\]", "## Vault Map\n" + vault_map, src, flags=re.S)
 for k, v in {
-    "{{LANGUAGE}}": cfg.get("language", "es"),
-    "{{JOURNAL_TIME}}": cfg.get("journal", {}).get("time", "20:30"),
-    "{{TIMEZONE}}": cfg.get("timezone", "UTC"),
-    "{{HABITS}}": ", ".join(cfg.get("habits", [])) or "ninguno",
-    "{{ACCOUNTABILITY}}": ", ".join(cfg.get("accountability", [])) or "a definir en la entrevista",
-    "{{VAULT_NAME}}": cfg.get("vault_name", "mi-cerebro"),
+    "{{LANGUAGE}}": text(cfg.get("language"), "es"),
+    "{{JOURNAL_TIME}}": text(journal.get("time"), "20:30"),
+    "{{TIMEZONE}}": text(cfg.get("timezone"), "UTC"),
+    "{{HABITS}}": words(cfg.get("habits")) or "ninguno",
+    "{{ACCOUNTABILITY}}": words(cfg.get("accountability")) or "a definir en la entrevista",
+    "{{VAULT_NAME}}": text(cfg.get("vault_name"), "mi-cerebro"),
+    "{{INSIGHTS_TIME}}": text(schedule.get("insights_time"), "21:00"),
+    "{{MAINTENANCE_TIME}}": text(schedule.get("maintenance_time"), "03:30"),
+    "{{UPDATE_TIME}}": text(schedule.get("update_time"), "08:00"),
 }.items():
-    app = app.replace(k, str(v))
+    app = app.replace(k, v)
 header = ("<!-- Generado por install.sh desde el template de ai-brain-starter + adaptación OpenCode. "
           "Completa las secciones personales con la entrevista de setup. -->\n\n")
 out.write_text(header + src.rstrip() + "\n\n" + app + "\n", encoding="utf-8")
@@ -421,44 +400,42 @@ PYGEN
   [ -f "$VAULT/AGENTS.md" ] && ok "AGENTS.md generado (plantilla + adaptación OpenCode)" || die "fallo generando AGENTS.md"
 fi
 managed_link "AGENTS.md" "$VAULT/CLAUDE.md" "CLAUDE.md"
+flush_links
 
 echo "== 9. Plugin brain-vault (hooks OpenCode) =="
 managed_copy "$PKG/plugin/brain-vault/index.js" "$VAULT/.opencode/plugins/brain-vault/index.js" ".opencode/plugins/brain-vault/index.js"
 if command -v node >/dev/null; then
-  node --check "$VAULT/.opencode/plugins/brain-vault/index.js" && ok "plugin instalado (sintaxis validada)" || die "el plugin del paquete tiene un error de sintaxis"
+  node --check "$VAULT/.opencode/plugins/brain-vault/index.js" && ok "plugin instalado (sintaxis validada)" || die "el plugin instalado tiene un error de sintaxis: .opencode/plugins/brain-vault/index.js"
 else
   ok "plugin instalado (lee ⚙️ Meta/brain-config.json)"
 fi
 
 echo "== 10. Trabajos programados (scripts data-driven) =="
 mkdir -p "$VAULT/scripts/jobs"
+n_jobs=0
 for f in "$PKG"/templates/jobs/*.sh; do
   [ -f "$f" ] || continue
   n="$(basename "$f")"
-  managed_copy "$f" "$VAULT/scripts/jobs/$n" "scripts/jobs/$n"
-  if [ "$MANAGED_COPY_RESULT" = 1 ]; then
-    chmod +x "$VAULT/scripts/jobs/$n"
-    owner_manifest record-file "scripts/jobs/$n" "$VAULT/scripts/jobs/$n" || die "no se pudo registrar scripts/jobs/$n"
-  fi
+  managed_copy "$f" "$VAULT/scripts/jobs/$n" "scripts/jobs/$n" 0755
+  [ "$MANAGED_COPY_RESULT" = 1 ] && n_jobs=$((n_jobs+1))
 done
-managed_copy "$PKG/scripts/verify.sh" "$VAULT/scripts/verify.sh" "scripts/verify.sh" || die "falta $PKG/scripts/verify.sh en el paquete"
-if [ "$MANAGED_COPY_RESULT" = 1 ]; then
-  chmod +x "$VAULT/scripts/verify.sh"
-  owner_manifest record-file "scripts/verify.sh" "$VAULT/scripts/verify.sh" || die "no se pudo registrar scripts/verify.sh"
-fi
-for f in "$VAULT"/scripts/jobs/*.sh; do
-  [ -f "$f" ] || continue
-  # Do not change the mode of pre-existing or user-modified jobs.
-  owner_manifest file-matches "scripts/jobs/$(basename "$f")" "$f" >/dev/null 2>&1 || continue
-  chmod +x "$f"
-  owner_manifest record-file "scripts/jobs/$(basename "$f")" "$f" || die "no se pudo registrar $f"
-done
-ok "$(ls -1 "$VAULT/scripts/jobs" | wc -l | tr -d ' ') trabajos copiados"
+managed_copy "$PKG/scripts/verify.sh" "$VAULT/scripts/verify.sh" "scripts/verify.sh" 0755
+managed_copy "$PKG/scripts/lib/ownership.py" "$VAULT/scripts/lib/ownership.py" "scripts/lib/ownership.py" 0644
+ok "$n_jobs trabajos gestionados"
 
 echo "== 11. Git del vault (respaldo local) =="
-if [ ! -d "$VAULT/.git" ]; then git -C "$VAULT" init -q -b main && ok "git init (main)"; fi
-if [ ! -f "$VAULT/.gitignore" ]; then
-  cat > "$VAULT/.gitignore" <<'GI'
+if [ "$WIRE" = 1 ]; then
+  ok "estado Git preservado (--wire)"
+else
+  if [ ! -d "$VAULT/.git" ]; then
+    if ! git -C "$VAULT" init -q -b main 2>/dev/null; then
+      git -C "$VAULT" init -q && git -C "$VAULT" symbolic-ref HEAD refs/heads/main \
+        || die "no se pudo inicializar el repositorio Git del vault"
+    fi
+    ok "git init (main)"
+  fi
+  if [ ! -f "$VAULT/.gitignore" ]; then
+    cat > "$VAULT/.gitignore" <<'GI'
 .opencode/skills/ai-brain-starter/
 .opencode/skills/humanizer/
 .obsidian/plugins/
@@ -469,18 +446,16 @@ if [ ! -f "$VAULT/.gitignore" ]; then
 ⚙️ Meta/logs/*.log
 ⚙️ Meta/.probe-on
 GI
-  ok ".gitignore"
+    ok ".gitignore"
+  fi
 fi
-if [ -z "$(git -C "$VAULT" status --porcelain)" ]; then ok "sin cambios por confirmar"
-else git -C "$VAULT" add AGENTS.md CLAUDE.md .gitignore .opencode scripts
-[ -f opencode.json ] && git -C "$VAULT" add opencode.json || true "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "💼 Business" "🚀 I+D" "⚙️ Meta" && git -C "$VAULT" commit -q -m "chore: bootstrap ai-brain OpenCode vault" && ok "commit base"; fi
 
 if [ "$WITH_MCP" = 1 ]; then
   echo "== 12. MCP remotos (opt-in) =="
   if [ -L "$VAULT/opencode.json" ]; then
     warn "opencode.json es un symlink; se preservó sin modificarlo"
   else
-    MCP_ADDED="$(python3 - "$VAULT/opencode.json" <<'PY'
+    if ! MCP_ADDED="$(python3 - "$VAULT/opencode.json" 2>&1 <<'PY'
 import json, pathlib, sys
 p = pathlib.Path(sys.argv[1])
 if p.exists() and (p.is_symlink() or not p.is_file() or p.stat().st_nlink != 1):
@@ -500,7 +475,9 @@ if added:
     p.write_text(json.dumps(d, indent=2) + "\n", encoding="utf-8")
 print(json.dumps(added, separators=(",", ":"), ensure_ascii=False))
 PY
-    )"
+    )"; then
+      die "no se pudo configurar MCP en opencode.json: $MCP_ADDED"
+    fi
     [ "$MCP_ADDED" = "{}" ] || owner_manifest record-config "$MCP_ADDED" || die "no se pudo registrar la configuración MCP"
     ok "MCP remotos configurados sin sobrescribir entradas existentes"
   fi
@@ -561,11 +538,47 @@ if [ "$WITH_SCHEDULE" = 1 ]; then
   bash "$PKG/scripts/schedule.sh" "$VAULT"
 fi
 
+echo "== 15. Commit base del vault =="
+if [ "$WIRE" = 1 ]; then
+  ok "estado Git preservado (--wire)"
+elif [ ! -d "$VAULT/.git" ]; then
+  warn "sin repositorio Git; commit base omitido"
+elif [ -z "$(git -C "$VAULT" status --porcelain)" ]; then
+  ok "sin cambios por confirmar"
+else
+  # Solo maquinaria del paquete y la estructura vacía: el contenido personal nunca entra.
+  GIT_ADD=()
+  for path in AGENTS.md CLAUDE.md .gitignore .opencode scripts opencode.json \
+              "⚙️ Meta/scripts" "⚙️ Meta/Floors" "⚙️ Meta/brain-config.json" "⚙️ Meta/journal-config.md"; do
+    [ -e "$VAULT/$path" ] || [ -L "$VAULT/$path" ] || continue
+    GIT_ADD+=("$path")
+  done
+  for d in "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "💼 Business" "🚀 I+D" "⚙️ Meta"; do
+    [ -d "$VAULT/$d" ] || continue
+    while IFS= read -r keep; do GIT_ADD+=("${keep#"$VAULT"/}"); done < <(find "$VAULT/$d" -name .gitkeep -print)
+  done
+  git -C "$VAULT" add -- "${GIT_ADD[@]}"
+  if git -C "$VAULT" diff --cached --quiet; then
+    ok "sin cambios por confirmar"
+  else
+    git -C "$VAULT" commit -q -m "chore: bootstrap ai-brain OpenCode vault" && ok "commit base"
+  fi
+fi
+
 echo
-echo "━━━ Instalación completa ━━━"
+if [ "$WIRE" = 1 ]; then
+  echo "━━━ Re-cableado completo ━━━"
+else
+  echo "━━━ Instalación completa ━━━"
+fi
 echo "  vault: $VAULT"
 echo "  Siguientes pasos:"
-echo "   1. Reinicia OpenCode o ejecuta /reload para que cargue el plugin."
-echo "   2. Edita AGENTS.md (sección Me / Current Focus) o corre la entrevista de setup."
-echo "   3. Esta noche: /journal — la primera entrada activa el sistema."
-echo "   4. Verificación: bash $VAULT/scripts/verify.sh"
+if [ "$WIRE" = 1 ]; then
+  echo "   1. Reinicia OpenCode o ejecuta /reload para que cargue el plugin."
+  echo "   2. Verificación del vault: bash $VAULT/scripts/verify.sh"
+else
+  echo "   1. Reinicia OpenCode o ejecuta /reload para que cargue el plugin."
+  echo "   2. Edita AGENTS.md (sección Me / Current Focus) o corre la entrevista de setup."
+  echo "   3. Esta noche: /journal — la primera entrada activa el sistema."
+  echo "   4. Verificación: bash $VAULT/scripts/verify.sh"
+fi

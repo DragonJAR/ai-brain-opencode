@@ -1,7 +1,7 @@
 # ai-brain-opencode
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20WSL2-green.svg)](docs/COMPAT.md)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows%20%7C%20WSL2-green.svg)](docs/COMPAT.md)
 [![Author](https://img.shields.io/badge/author-DragonJAR%20SAS-orange.svg)](https://www.dragonjar.org)
 [![Español](https://img.shields.io/badge/read%20in-Espa%C3%B1ol-blue.svg)](README.es.md)
 
@@ -23,7 +23,7 @@
 | `.opencode/plugins/brain-vault/index.js` | OpenCode plugin (context, close signal, meeting trigger, frontmatter) |
 | `AGENTS.md` (+ `CLAUDE.md` → `AGENTS.md`) | Per-session brain memory; OpenCode reads it each session |
 | `⚙️ Meta/brain-config.json` | Language, timezone, journal time, habits, schedule times |
-| `scripts/verify.sh`, `scripts/lib/ownership.py`, `scripts/jobs/*.sh` | Health check, ownership library, scheduled jobs |
+| `scripts/verify.sh`, `scripts/lib/ownership.py`, `scripts/lib/python3.sh`, `scripts/jobs/*.sh` | Health check, ownership library, Python detection, scheduled jobs |
 | `.opencode/brain-vault-install-manifest.json` | Ownership fingerprints for safe uninstall |
 | `opencode.json` | **Only** with `--with-mcp` (remote MCP servers) |
 
@@ -33,16 +33,16 @@
 |---|---|
 | [OpenCode](https://opencode.ai/docs) with a configured model | Runtime that loads the vault and plugin |
 | Git | Clone starter + humanizer; vault bootstrap commit |
-| Python 3.10+ (`python3` on `PATH`) | Installer, ownership, journal helper scripts (installer checks for `python3`) |
+| Python 3.9+ (`python3`, `py -3` or `python` on `PATH`) | Installer, ownership and journal helpers (the installer validates the version) |
 | Node 18+ (optional) | If present, installer runs `node --check` on the plugin |
-| macOS or Linux (or WSL2 Ubuntu) | POSIX symlinks + launchd/cron |
+| macOS, Linux, WSL2 Ubuntu, or Windows native (Git Bash) | POSIX: symlinks + launchd/cron · Windows: file copies + **schtasks** |
 | Obsidian (optional) | Browse the vault; `--with-obsidian` installs five community plugins |
 
 ## Install
 
 ```bash
 git clone https://github.com/DragonJAR/ai-brain-opencode.git
-cd ai-brain-opencode   # or your local checkout of this package
+cd ai-brain-opencode
 bash install.sh ~/path/to/my-brain
 ```
 
@@ -54,7 +54,7 @@ The vault path is **always explicit**. Does not automatically detect vaults or m
 | `--wire` | Re-link an existing vault after starter updates (no clone/scaffold; may combine with `--with-schedule`) |
 | `--with-mcp` | Add remote MCP servers `granola` + `chatprd` into vault `opencode.json` (sends conversation when used—opt-in) |
 | `--with-obsidian` | Install five Obsidian community plugins under `.obsidian/plugins/` |
-| `--with-schedule` | Register scheduled jobs (launchd on macOS, cron on Linux) |
+| `--with-schedule` | Register scheduled jobs (launchd on macOS, cron on Linux, schtasks on Windows) |
 
 Also accepted: `--help` / `-h`, and `--yes` / `-y` (no prompts; installer is non-interactive).
 
@@ -68,7 +68,7 @@ bash install.sh ~/path/to/my-brain --wire
 ## Verify
 
 ```bash
-bash tests/run.sh                 # package regressions (isolated fixtures)
+bash tests/run.sh                 # package regression suite
 bash <vault>/scripts/verify.sh    # vault health: structure, symlinks, config, plugin, ownership
 ```
 
@@ -138,8 +138,8 @@ On **WSL2**, cron does not start by itself: `sudo service cron start` (installer
 |---|---|
 | macOS | Full: symlinks + **launchd** |
 | Linux | Full: symlinks + **cron** |
-| WSL2 (Ubuntu) | Supported inside WSL; start **cron** manually |
-| Windows native | **Not supported by design** (POSIX symlinks + launchd/cron). Use WSL2. Installer rejects `MINGW*`/`MSYS*`/`CYGWIN*` before mutating the vault. |
+| WSL2 (Ubuntu) | Supported inside WSL; start **cron** manually (`sudo service cron start`) |
+| Windows native (Git Bash) | Implemented: **file copies** (no package symlinks) + **schtasks**. Needs `git`, Python ≥3.9, `bash`, `cygpath`, and `opencode run --help`. Developer Mode is **not** required. Evidence: covered by simulated Windows fixtures (`uname`/`schtasks` mocks); real-hardware validation is still pending, so please open an issue if something breaks. WSL2 remains a fine alternative. |
 
 ## Uninstall
 

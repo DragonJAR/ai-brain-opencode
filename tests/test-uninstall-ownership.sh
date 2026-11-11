@@ -2,7 +2,9 @@
 set -euo pipefail
 
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ai-brain-uninstall-test.XXXXXX")"
+# shellcheck source=lib/mocks.sh
+. "$PKG/tests/lib/mocks.sh"
+TMP_ROOT="$(ai_brain_test_root uninstall-ownership)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 VAULT="$TMP_ROOT/vault-user"
@@ -15,8 +17,6 @@ MOCK_GIT_CALLS="$TMP_ROOT/git-calls.log"
 mkdir -p "$TMP_ROOT/bin" "$VAULT/.opencode/skills" "$VAULT/.opencode/commands" \
   "$VAULT/.opencode/plugins/brain-vault" "$VAULT/scripts/jobs" \
   "$VAULT/⚙️ Meta" "$TMP_ROOT/foreign/ai-brain-starter-legacy"
-
-. "$PKG/tests/lib/mocks.sh"
 ai_brain_mock_platform "$TMP_ROOT/bin"
 ai_brain_mock_crontab "$TMP_ROOT/bin"
 ai_brain_mock_git "$TMP_ROOT/bin"

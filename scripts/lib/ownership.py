@@ -19,7 +19,8 @@ Actions:
                                  exit 1 unless the symlink record and target match
     record-link     <rel> <path> store a symlink record
     record-config   <json>       store MCP entries added to opencode.json
-    record-tree     <rel> <path> store the fingerprint of a vendor clone
+    record-tree     <rel> <path> store the fingerprint of a copied/cloned tree
+    tree-matches    <rel> <path> exit 1 unless the tree still matches its record
     agent-matches   <path>       exit 1 unless a launch agent still matches
     record-agent    <path> <label>
     agents-tsv                   print "<path>\t<label>" per launch agent
@@ -30,6 +31,9 @@ Actions:
     verify                       print a JSON health summary of the manifest
 
 Exit codes: 0 ok, 1 invalid/manifest error, 2 legacy manifest (fail closed).
+
+`cron_lines` holds the owned scheduled entries: cron lines on POSIX, schtasks
+task names on Windows.
 """
 
 import hashlib
@@ -63,19 +67,19 @@ def load(path):
     if (data.get("format") != 1 or data.get("owner") != "ai-brain-opencode"
             or not isinstance(data.get("instance"), str) or len(data["instance"]) != 32
             or data.get("seal") != seal(data)):
-        raise ManifestError("ownership manifest failed validation")
+        raise ManifestError("el manifiesto de propiedad no pasó la validación")
     for key in REQUIRED_KEYS:
         if key not in data:
-            raise ManifestError("ownership manifest is missing " + key)
+            raise ManifestError("al manifiesto de propiedad le falta " + key)
     if (not all(isinstance(data[key], dict) for key in REQUIRED_DICTS)
             or not isinstance(data["cron_lines"], list)):
-        raise ManifestError("ownership manifest has invalid record collections")
+        raise ManifestError("el manifiesto de propiedad tiene colecciones de registros inválidas")
     return data
 
 
 def require_version(data):
     if type(data.get("cron_ownership_version")) is not int or data["cron_ownership_version"] != 2:
-        raise LegacyManifest("legacy or unsupported cron ownership; refusing automatic migration")
+        raise LegacyManifest("propiedad de cron heredada o no soportada; no se migra automáticamente")
 
 
 def save(path, data):
@@ -90,14 +94,14 @@ def save(path, data):
 def relative(value):
     path = pathlib.PurePosixPath(value)
     if path.is_absolute() or ".." in path.parts or str(path) != value:
-        raise ManifestError("ownership paths must be normalized vault-relative paths")
+        raise ManifestError("las rutas de propiedad deben ser relativas al vault, sin '..' ni absolutas")
     return value
 
 
 def file_info(path):
     target = pathlib.Path(path)
     if target.is_symlink() or not target.is_file():
-        raise ManifestError("owned file is not a regular file")
+        raise ManifestError("el archivo propio no es un archivo regular")
     st = target.stat()
     return {
         "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
@@ -181,7 +185,7 @@ def dispatch(path, action, argv):
     if action == "init":
         if path.exists() or path.is_symlink():
             if path.is_symlink():
-                raise ManifestError("ownership manifest is a symlink; refusing to follow it")
+                raise ManifestError("el manifiesto de propiedad es un symlink; no se sigue")
             require_version(load(path))
         else:
             save(path, new_manifest())
@@ -205,7 +209,7 @@ def dispatch(path, action, argv):
         save(path, data)
     elif action == "record-links":
         if len(argv) % 2 != 0:
-            raise ManifestError("record-links expects <rel> <dst> pairs")
+            raise ManifestError("record-links espera pares <ruta> <destino>")
         for rel, dst in zip(argv[0::2], argv[1::2]):
             data["symlinks"][relative(rel)] = os.readlink(dst)
         save(path, data)
@@ -225,6 +229,9 @@ def dispatch(path, action, argv):
     elif action == "record-tree":
         data["trees"][relative(argv[0])] = tree_hash(argv[1])
         save(path, data)
+    elif action == "tree-matches":
+        if data["trees"].get(relative(argv[0])) != tree_hash(argv[1]):
+            return 1
     elif action == "agent-matches":
         entry = data["launch_agents"].get(argv[0])
         if entry is None or not pathlib.Path(argv[0]).is_file() or pathlib.Path(argv[0]).is_symlink():
@@ -249,13 +256,13 @@ def dispatch(path, action, argv):
         data["cron_lines"] = []
         save(path, data)
     else:
-        raise ManifestError("unknown ownership action: " + action)
+        raise ManifestError("acción de propiedad desconocida: " + action)
     return 0
 
 
 def main(argv):
     if len(argv) < 2:
-        print(__doc__.strip().splitlines()[0], file=sys.stderr)
+        print("uso: python3 ownership.py <manifiesto> <acción> [args...]", file=sys.stderr)
         return 1
     path = pathlib.Path(argv[0])
     action = argv[1]
@@ -263,15 +270,15 @@ def main(argv):
         return dispatch(path, action, argv[2:])
     except LegacyManifest as error:
         if action == "cron-json":
-            print("legacy or unsupported cron ownership; refusing to trust scheduled entries", file=sys.stderr)
+            print("propiedad de cron heredada o no soportada; no se confían las entradas programadas", file=sys.stderr)
         else:
-            print("error: " + str(error), file=sys.stderr)
+            print("fallo: " + str(error), file=sys.stderr)
         return error.exit_code
     except ManifestError as error:
-        print("error: " + str(error), file=sys.stderr)
+        print("fallo: " + str(error), file=sys.stderr)
         return error.exit_code
     except (OSError, ValueError, TypeError, AttributeError, json.JSONDecodeError) as error:
-        print("error: " + str(error), file=sys.stderr)
+        print("fallo: " + str(error), file=sys.stderr)
         return 1
 
 

@@ -3,7 +3,9 @@ set -euo pipefail
 
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASH_BIN="$(command -v bash)"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ai-brain-t3-test.XXXXXX")"
+# shellcheck source=lib/mocks.sh
+. "$PKG/tests/lib/mocks.sh"
+TMP_ROOT="$(ai_brain_test_root t3-contract)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 failures=0
@@ -91,15 +93,10 @@ MOCK_GIT_CALLS="$TMP_ROOT/git-calls.log"
 mkdir -p "$TMP_ROOT/bin" "$VAULT"
 MOCK_UNAME=Linux
 
-. "$PKG/tests/lib/mocks.sh"
 ai_brain_mock_platform "$TMP_ROOT/bin"
 ai_brain_mock_crontab "$TMP_ROOT/bin"
 ai_brain_mock_git "$TMP_ROOT/bin"
-cat > "$TMP_ROOT/bin/opencode" <<'SH'
-#!/bin/sh
-exit 0
-SH
-chmod +x "$TMP_ROOT/bin/opencode"
+ai_brain_mock_opencode "$TMP_ROOT/bin"
 
 export MOCK_UNAME MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES MOCK_GIT_CALLS
 export PATH="$TMP_ROOT/bin:$PATH"
@@ -171,18 +168,149 @@ if ! grep -Fq 'commit -q -m chore: bootstrap ai-brain OpenCode vault' "$MOCK_GIT
   fail "installer did not create the base commit"
 fi
 
-# Native Windows must be rejected before any mutation, with WSL2 as the path.
+# Native Windows (MINGW*) is a supported backend: WIRE_MODE=copy (zero package symlinks).
+# Truly unsupported platforms (e.g. FreeBSD) still abort before mutation.
+ai_brain_mock_windows "$TMP_ROOT/bin"
+MOCK_SCHTASKS_CALLS="$TMP_ROOT/schtasks-calls.log"
+: > "$MOCK_SCHTASKS_CALLS"
+export MOCK_SCHTASKS_CALLS
+
+UNSUPPORTED_VAULT="$TMP_ROOT/freebsd-vault"
+mkdir -p "$UNSUPPORTED_VAULT"
+printf 'keep\n' > "$UNSUPPORTED_VAULT/keep.txt"
+if MOCK_UNAME=FreeBSD "$BASH_BIN" "$PKG/install.sh" "$UNSUPPORTED_VAULT" > "$TMP_ROOT/freebsd.txt" 2>&1; then
+  fail "installer accepted an unsupported platform (FreeBSD)"
+fi
+if ! grep -Eqi 'plataforma no soportada|no soportad' "$TMP_ROOT/freebsd.txt"; then
+  fail "unsupported-platform rejection did not name the failure"
+fi
+if [ ! -f "$UNSUPPORTED_VAULT/keep.txt" ] || [ -e "$UNSUPPORTED_VAULT/.opencode" ]; then
+  fail "unsupported-platform rejection modified the target"
+fi
+
 WINDOWS_VAULT="$TMP_ROOT/windows-vault"
 mkdir -p "$WINDOWS_VAULT"
-printf 'keep\n' > "$WINDOWS_VAULT/keep.txt"
-if MOCK_UNAME=MINGW64_NT-10.0 "$BASH_BIN" "$PKG/install.sh" "$WINDOWS_VAULT" > "$TMP_ROOT/windows.txt" 2>&1; then
-  fail "installer accepted native Windows"
+# opencode must answer `opencode run --help` on the Windows preflight path.
+ai_brain_mock_opencode "$TMP_ROOT/bin"
+if ! MOCK_UNAME=MINGW64_NT-10.0 MOCK_VAULT="$WINDOWS_VAULT" \
+  "$BASH_BIN" "$PKG/install.sh" "$WINDOWS_VAULT" > "$TMP_ROOT/windows.txt" 2>&1; then
+  fail "installer rejected native Windows (MINGW); see isolated install output"
+  cat "$TMP_ROOT/windows.txt" >&2
 fi
-if ! grep -Fq 'WSL2' "$TMP_ROOT/windows.txt"; then
-  fail "Windows rejection did not point at WSL2"
+if ! grep -Fq 'Windows nativo detectado' "$TMP_ROOT/windows.txt"; then
+  fail "Windows install did not announce native Windows / copy wiring"
 fi
-if [ ! -f "$WINDOWS_VAULT/keep.txt" ] || [ -e "$WINDOWS_VAULT/.opencode" ]; then
-  fail "Windows rejection modified the target"
+# Package wiring must be copies: no symlinks under the vault root.
+if [ -n "$(find "$WINDOWS_VAULT" -type l 2>/dev/null | head -n 1)" ]; then
+  fail "Windows install created symlinks (expected WIRE_MODE=copy with zero symlinks)"
+  find "$WINDOWS_VAULT" -type l >&2 || true
+fi
+if [ ! -d "$WINDOWS_VAULT/.opencode/skills" ] \
+  || [ -z "$(find "$WINDOWS_VAULT/.opencode/skills" -maxdepth 1 -mindepth 1 -type d ! -name ai-brain-starter 2>/dev/null | head -n 1)" ]; then
+  fail "Windows install did not materialize skill copies under .opencode/skills"
+fi
+if [ ! -f "$WINDOWS_VAULT/.opencode/commands/brain-journal.md" ] \
+  && [ -z "$(ls -1 "$WINDOWS_VAULT/.opencode/commands" 2>/dev/null | head -n 1)" ]; then
+  fail "Windows install did not materialize command copies"
+fi
+if [ ! -f "$WINDOWS_VAULT/AGENTS.md" ] || [ -L "$WINDOWS_VAULT/CLAUDE.md" ]; then
+  fail "Windows install did not leave AGENTS.md / CLAUDE.md as regular copy content"
+fi
+
+# schtasks dry-run: cygpath+schtasks mocks; printed /ST times match package defaults.
+mkdir -p "$WINDOWS_VAULT/scripts/jobs" "$WINDOWS_VAULT/⚙️ Meta"
+for j in journal-reminder insights-weekly daily-maintenance update-brain; do
+  [ -f "$WINDOWS_VAULT/scripts/jobs/$j.sh" ] || { printf '#!/bin/sh\n' > "$WINDOWS_VAULT/scripts/jobs/$j.sh"; chmod +x "$WINDOWS_VAULT/scripts/jobs/$j.sh"; }
+done
+if ! MOCK_UNAME=MINGW64_NT-10.0 \
+  "$BASH_BIN" "$PKG/scripts/schedule.sh" "$WINDOWS_VAULT" --dry-run \
+  > "$TMP_ROOT/windows-sched.txt" 2>"$TMP_ROOT/windows-sched.err"; then
+  fail "Windows schedule --dry-run failed"
+  cat "$TMP_ROOT/windows-sched.txt" "$TMP_ROOT/windows-sched.err" >&2
+fi
+for st in '20:30' '21:00' '03:30' '08:00'; do
+  if ! grep -Fq "/ST $st" "$TMP_ROOT/windows-sched.txt"; then
+    fail "Windows schedule dry-run missing /ST $st"
+    cat "$TMP_ROOT/windows-sched.txt" >&2
+  fi
+done
+if ! grep -Fq 'schtasks /Create' "$TMP_ROOT/windows-sched.txt"; then
+  fail "Windows schedule dry-run did not print schtasks /Create lines"
+fi
+# Windows schtasks contract: one ai-brain-run.cmd wrapper; /TR is wrapper path + job name.
+if ! grep -Fq 'ai-brain-run.cmd' "$TMP_ROOT/windows-sched.txt"; then
+  fail "Windows schedule dry-run /TR missing ai-brain-run.cmd wrapper"
+  cat "$TMP_ROOT/windows-sched.txt" >&2
+fi
+if [ "$(grep -c $'\b' "$TMP_ROOT/windows-sched.txt" || true)" != 0 ]; then
+  fail "Windows schedule dry-run lines contain backspace (0x08) bytes"
+  cat "$TMP_ROOT/windows-sched.txt" >&2
+fi
+# Non-dry-run creates the wrapper; body must invoke bash "%~dp0%JOB%.sh".
+if ! MOCK_UNAME=MINGW64_NT-10.0 \
+  "$BASH_BIN" "$PKG/scripts/schedule.sh" "$WINDOWS_VAULT" \
+  > "$TMP_ROOT/windows-sched-apply.txt" 2>"$TMP_ROOT/windows-sched-apply.err"; then
+  fail "Windows schedule apply failed (needed to materialize ai-brain-run.cmd)"
+  cat "$TMP_ROOT/windows-sched-apply.txt" "$TMP_ROOT/windows-sched-apply.err" >&2
+fi
+WIN_RUNNER_CMD="$WINDOWS_VAULT/scripts/jobs/ai-brain-run.cmd"
+if [ ! -f "$WIN_RUNNER_CMD" ]; then
+  fail "Windows schedule did not create scripts/jobs/ai-brain-run.cmd"
+fi
+if ! grep -Fq 'bash "%~dp0%JOB%.sh"' "$WIN_RUNNER_CMD"; then
+  fail "ai-brain-run.cmd does not invoke bash with %~dp0%JOB%.sh"
+  cat "$WIN_RUNNER_CMD" >&2
+fi
+
+# schtasks apply must record the task names in the manifest (ownership), and
+# --remove deletes exactly those — a foreign "ai-brain ..." task stays untouched.
+if ! python3 - "$WINDOWS_VAULT/.opencode/brain-vault-install-manifest.json" <<'PY'
+import json, pathlib, sys
+names = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["cron_lines"]
+expected = {"ai-brain windows-vault journal-reminder", "ai-brain windows-vault insights-weekly",
+            "ai-brain windows-vault daily-maintenance", "ai-brain windows-vault update-brain"}
+assert set(names) == expected, "manifest did not record the schtasks task names: %r" % (names,)
+PY
+then
+  fail "Windows schedule apply did not record owned schtasks task names"
+fi
+: > "$MOCK_SCHTASKS_CALLS"
+MOCK_SCHTASKS_STATE="$TMP_ROOT/schtasks-state"
+export MOCK_SCHTASKS_STATE
+{
+  printf '"\\ai-brain windows-vault journal-reminder","2026-01-01 20:30:00"\n'
+  printf '"ai-brain windows-vault insights-weekly","2026-01-01 21:00:00"\n'
+  printf '"\\ai-brain windows-vault daily-maintenance","2026-01-01 03:30:00"\n'
+  printf '"ai-brain windows-vault update-brain","2026-01-01 08:00:00"\n'
+  printf '"\\ai-brain other-vault foreign-job","2026-01-01 09:00:00"\n'
+} > "$MOCK_SCHTASKS_STATE"
+if ! MOCK_UNAME=MINGW64_NT-10.0 \
+  "$BASH_BIN" "$PKG/scripts/schedule.sh" "$WINDOWS_VAULT" --remove \
+  > "$TMP_ROOT/windows-sched-remove.txt" 2>&1; then
+  fail "Windows schedule --remove failed"
+  cat "$TMP_ROOT/windows-sched-remove.txt" >&2
+fi
+for owned_name in journal-reminder insights-weekly daily-maintenance update-brain; do
+  if ! grep -Fq "/Delete /F /TN ai-brain windows-vault $owned_name" "$MOCK_SCHTASKS_CALLS"; then
+    fail "Windows --remove did not delete the owned task $owned_name"
+  fi
+done
+if grep -Fq "/Delete /F /TN ai-brain other-vault foreign-job" "$MOCK_SCHTASKS_CALLS"; then
+  fail "Windows --remove deleted a foreign ai-brain task"
+fi
+if ! grep -Fq 'tarea ajena preservada: ai-brain other-vault foreign-job' "$TMP_ROOT/windows-sched-remove.txt"; then
+  fail "Windows --remove did not report the preserved foreign task"
+fi
+
+# Owned copy trees must re-sync with the starter (the Windows --wire path).
+printf '\nresync-marker\n' >> "$WINDOWS_VAULT/.opencode/skills/ai-brain-starter/skills/journal/SKILL.md"
+if ! MOCK_UNAME=MINGW64_NT-10.0 MOCK_VAULT="$WINDOWS_VAULT" \
+  "$BASH_BIN" "$PKG/install.sh" "$WINDOWS_VAULT" > "$TMP_ROOT/windows-resync.txt" 2>&1; then
+  fail "Windows re-install failed"
+  cat "$TMP_ROOT/windows-resync.txt" >&2
+fi
+if ! grep -Fq 'resync-marker' "$WINDOWS_VAULT/.opencode/skills/journal/SKILL.md"; then
+  fail "Windows re-install did not refresh the owned copied skill tree"
 fi
 
 # A vault health check with failures must exit non-zero.
@@ -356,8 +484,8 @@ if ! grep -Fq 'identidad git presente' "$TMP_ROOT/ident-repo.txt" || ! grep -Fq 
 fi
 
 if [ "$failures" -gt 0 ]; then
-  printf 'FAIL: T3 installer and verification contract had %s failed assertions\n' "$failures" >&2
+  printf 'FAIL: installer and verification contract had %s failed assertions\n' "$failures" >&2
   exit 1
 fi
 
-printf 'PASS: T3 wire, OpenCode preflight, strict JSON, and package verifier contracts\n'
+printf 'PASS: wire, OpenCode preflight, strict JSON, and package verifier contracts\n'

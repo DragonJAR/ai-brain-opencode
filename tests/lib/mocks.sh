@@ -7,6 +7,16 @@ ai_brain_test_root() {
   mktemp -d "${TMPDIR:-/tmp}/ai-brain-$1.XXXXXX"
 }
 
+# HH:MM -> "MM HH": cron fields are minute-then-hour, launchd hour-then-minute.
+# Mirrors pm()/hm() in schedule.sh: the minute drops one leading zero.
+cron_minute_hour() {
+  local hhmm="$1" hour minute
+  hour=${hhmm%%:*}
+  minute=${hhmm#*:}
+  minute=$(printf '%s\n' "$minute" | sed 's/^0//')
+  printf '%s %s' "$minute" "$hour"
+}
+
 ai_brain_mock_platform() {
   local bin="$1"
   mkdir -p "$bin"
@@ -41,6 +51,57 @@ SH
   chmod +x "$bin/crontab"
 }
 
+# Windows-native helpers for Git Bash simulation (cygpath + schtasks).
+# Dry-run of schedule.sh only needs cygpath; schtasks is logged if invoked.
+ai_brain_mock_windows() {
+  local bin="$1"
+  mkdir -p "$bin"
+  cat > "$bin/cygpath" <<'SH'
+#!/bin/sh
+# Minimal cygpath -w: map a POSIX path to a fake Windows path for tests.
+mode=unix
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -w|-wa|-wt) mode=win; shift ;;
+    -u|-ua|-ut) mode=unix; shift ;;
+    --) shift; break ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+path="${1:-.}"
+if [ "$mode" = win ]; then
+  # Real cygpath -w only converts separators; it never invents extensions.
+  printf 'C:\\mock%s\n' "$(printf '%s' "$path" | tr '/' '\\')"
+else
+  printf '%s\n' "$path"
+fi
+SH
+  chmod +x "$bin/cygpath"
+  cat > "$bin/schtasks" <<'SH'
+#!/bin/sh
+# Log schtasks invocations; /Query returns MOCK_SCHTASKS_STATE when set.
+printf '%s\n' "$*" >> "${MOCK_SCHTASKS_CALLS:-/dev/null}"
+case " $* " in
+  *" /Query "*)
+    [ -f "${MOCK_SCHTASKS_STATE:-}" ] && cat "${MOCK_SCHTASKS_STATE:-}"
+    exit 0 ;;
+esac
+exit 0
+SH
+  chmod +x "$bin/schtasks"
+}
+
+ai_brain_mock_opencode() {
+  local bin="$1"
+  mkdir -p "$bin"
+  cat > "$bin/opencode" <<'SH'
+#!/bin/sh
+exit 0
+SH
+  chmod +x "$bin/opencode"
+}
+
 ai_brain_mock_git() {
   local bin="$1"
   mkdir -p "$bin"
@@ -48,16 +109,35 @@ ai_brain_mock_git() {
 #!/usr/bin/env bash
 set -euo pipefail
 if [ -n "${MOCK_GIT_CALLS:-}" ]; then printf '%s\n' "$*" >> "$MOCK_GIT_CALLS"; fi
+reply_var() {
+  if [ "${MOCK_GIT_IDENTITY:-present}" = "missing" ]; then
+    printf '%s\n' 'fatal: unable to auto-detect email address' >&2
+    exit 128
+  fi
+  printf '%s\n' 'Test User <test@example.invalid> 0 +0000'
+  exit 0
+}
 if [ "${1:-}" = clone ]; then
   destination="${@: -1}"
   url="${@: -2:1}"
   mkdir -p "$destination"
   if [[ "$url" == *ai-brain-starter ]]; then
-    mkdir -p "$destination/.git" "$destination/skills/journal" "$destination/commands" \
+    mkdir -p "$destination/.git" "$destination/commands" \
       "$destination/scripts" "$destination/floors" "$destination/templates/generated"
     printf 'ref: refs/heads/main\n' > "$destination/.git/HEAD"
     printf '# Stub starter skill\n' > "$destination/SKILL.md"
-    printf '# Stub journal skill\n' > "$destination/skills/journal/SKILL.md"
+    n="${MOCK_GIT_STARTER_SKILLS:-}"
+    if [ -n "$n" ] && [ "$n" -eq "$n" ] 2>/dev/null && [ "$n" -gt 0 ]; then
+      i=1
+      while [ "$i" -le "$n" ]; do
+        mkdir -p "$destination/skills/skill-$i"
+        printf '# skill %s\n' "$i" > "$destination/skills/skill-$i/SKILL.md"
+        i=$((i + 1))
+      done
+    else
+      mkdir -p "$destination/skills/journal"
+      printf '# Stub journal skill\n' > "$destination/skills/journal/SKILL.md"
+    fi
     printf '# Stub command\n' > "$destination/commands/brain-journal.md"
     cat > "$destination/scripts/generate_floor_stubs.py" <<'PY'
 from pathlib import Path
@@ -90,7 +170,11 @@ if [ "${1:-}" = -C ]; then
     add) exit 0 ;;
     diff) exit 1 ;;
     commit) exit 0 ;;
+    var) reply_var ;;
   esac
+fi
+if [ "${1:-}" = var ]; then
+  reply_var
 fi
 printf 'unexpected git command: %s\n' "$*" >&2
 exit 92

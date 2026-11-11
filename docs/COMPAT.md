@@ -16,7 +16,7 @@ mapea cada mecanismo, para saber qué está portado, qué se sustituyó y qué n
 | PreCompact | `ctx.session.hook("compaction")` | Disponible, no usado |
 | Stop / SessionEnd | `ctx.event.subscribe(...)` | Parcial |
 | `claude -p` headless (router) | `opencode run "<prompt>"` | **Sustituido** |
-| cron/launchd de CC | launchd (macOS) / cron (Linux) | **Sustituido** |
+| cron/launchd de CC | launchd (macOS) / cron (Linux) / Task Scheduler (Windows) | **Sustituido** |
 
 ## Los hooks del upstream y su destino
 
@@ -54,10 +54,7 @@ hooks, y el chequeo de zona horaria en eventos de calendario.
 
 ## Plataformas
 
-macOS y Linux están soportados de punta a punta. **Windows nativo no**: el cerebro se apoya en symlinks POSIX
-(`ln -s` sin privilegios), rutas con emoji y launchd/cron; en Git Bash `ln -s` copia en lugar de enlazar y el
-scheduler no existe. En Windows usa **WSL2 con Ubuntu** y ejecuta todo dentro de WSL. El instalador y el
-scheduler rechazan Windows nativo antes de tocar el vault y nombran WSL2 como la salida.
+macOS y Linux están soportados de punta a punta (symlinks POSIX + launchd/cron). **Windows nativo** está soportado directamente mediante Git for Windows: el instalador detecta entornos `MINGW*`/`MSYS*`/`CYGWIN*`, realiza el cableado mediante **copias** (`WIRE_MODE=copy`, sin symlinks del paquete) y programa los trabajos automáticos con **Task Scheduler** (`schtasks`, usando los horarios de la misma fuente única que cron/launchd). Requisitos reales en Windows nativo: Git for Windows (con `bash`), Python ≥3.9 (`python3`, `py -3` o `python`), `cygpath` y OpenCode CLI (`opencode run --help`). Evidencia: la ruta Windows está cubierta por fixtures simulados (`uname`/`schtasks` mock) y todavía no por una máquina Windows física; se declara así hasta que exista esa validación. No se requiere Developer Mode ni permisos de administrador. **WSL2** (ej. Ubuntu con cron manual: `sudo service cron start`) continúa disponible como alternativa de ejecución. Otras plataformas (p. ej. FreeBSD) se rechazan tempranamente antes de mutar el vault.
 
 ## Cómo se compensa la diferencia de bloqueo
 

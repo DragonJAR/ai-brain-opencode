@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# install.sh — instala el cerebro (ai-brain-starter adaptado a OpenCode V2).
+# install.sh — instala el cerebro personal (ai-brain-starter adaptado a OpenCode V2).
 #
 # Uso:
 #   bash install.sh <ruta-del-vault> [flags]
 # Flags:
-#   --config <archivo>   brain-config.json para sembrar (por defecto: valores incluidos)
+#   --config <archivo>   brain-config.json para sembrar (por defecto: templates/brain-config.example.json)
 #   --wire               solo re-cablea un vault existente (ruta de actualización)
 #   --with-mcp           agrega los MCP remotos granola + chatprd (opt-in: envían tu conversación cuando los usas)
 #   --with-obsidian      instala los complementos de Obsidian en el vault
-#   --with-schedule      instala los trabajos programados (launchd en macOS, cron en Linux)
+#   --with-schedule      instala los trabajos programados (launchd en macOS, cron en Linux, schtasks en Windows)
 #   --yes, -y            aceptado por compatibilidad; el instalador no hace preguntas
 #   --help, -h           muestra esta ayuda
-# Requisitos: macOS o Linux (en Windows usa WSL2), OpenCode CLI, git, python3.
+# Requisitos: macOS, Linux o Windows nativo (Git Bash), OpenCode CLI, git, Python >= 3.9.
+# En Windows hacen falta cygpath y que `opencode run --help` responda. No se exige Developer Mode.
 # Idempotente: re-ejecutar es seguro; el contenido personal nunca se sobrescribe.
 set -euo pipefail
 
@@ -48,13 +49,34 @@ if [ "$WIRE" = 1 ]; then
 fi
 
 echo "== 0. Preflight =="
+WIN=0
+WIRE_MODE="link"
 case "$OS" in
   Darwin) ok "macOS detectado (scheduler: launchd)" ;;
   Linux)  ok "Linux detectado (scheduler: cron)" ;;
   MINGW*|MSYS*|CYGWIN*)
-    die "Windows nativo no está soportado: el cerebro usa symlinks y launchd/cron. Usa WSL2 (Ubuntu) y ejecuta el instalador dentro de WSL. No se modificó el vault" ;;
-  *) die "plataforma no soportada ($OS): se requiere macOS o Linux. En Windows usa WSL2. No se modificó el vault" ;;
+    WIN=1
+    WIRE_MODE=copy
+    ok "Windows nativo detectado (scheduler: schtasks; cableado: copia)"
+    ;;
+  *) die "plataforma no soportada ($OS): se requiere macOS, Linux o Windows nativo (Git Bash). No se modificó el vault" ;;
 esac
+# shellcheck source=scripts/lib/python3.sh
+. "$PKG/scripts/lib/python3.sh"
+pick_python3 || die "falta Python >= 3.9 (python3, py -3 o python). No se modificó el vault"
+# En Windows el nombre `python3` del resto del script usa el intérprete elegido.
+# En POSIX no se define la función: los tests y el PATH siguen viendo el binario.
+if [ "$WIN" = 1 ]; then
+  python3() {
+    case "$PY3" in
+      python3) command python3 "$@" ;;
+      python) command python "$@" ;;
+      "py -3") py -3 "$@" ;;
+      *) # PY3 es un solo token aquí.
+        command $PY3 "$@" ;;
+    esac
+  }
+fi
 if [ "$OS" = "Linux" ] && { [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; }; then
   warn "WSL2 detectado: cron no arranca solo; actívalo con 'sudo service cron start' para que --with-schedule funcione"
 fi
@@ -75,13 +97,40 @@ PY
 )" || die "--config: $CONFIG $CONFIG_ERROR"
   ok "config válida: $CONFIG"
 fi
-for cmd in git python3; do command -v "$cmd" >/dev/null || die "falta $cmd (requerido)"; done
-command -v opencode >/dev/null || die "falta OpenCode CLI (requerido); instálalo antes de continuar. No se modificó el vault"
-ok "opencode CLI presente"
+command -v git >/dev/null || die "falta git (requerido)"
+if [ "$WIN" = 1 ]; then
+  command -v bash >/dev/null || die "falta bash (Git Bash). No se modificó el vault"
+  command -v cygpath >/dev/null || die "falta cygpath (lo requiere el scheduler de Windows). No se modificó el vault"
+  case "$VAULT" in
+    /mnt|/mnt/*) die "ruta bajo /mnt/ (interop de WSL). Usa una ruta nativa de Git Bash. No se modificó el vault" ;;
+  esac
+  command -v opencode >/dev/null || die "falta OpenCode CLI (requerido); instálalo antes de continuar. No se modificó el vault"
+  opencode run --help >/dev/null 2>&1 || die "opencode no responde a 'opencode run --help'. No se modificó el vault"
+  ok "opencode run --help responde"
+else
+  command -v opencode >/dev/null || die "falta OpenCode CLI (requerido); instálalo antes de continuar. No se modificó el vault"
+  ok "opencode CLI presente"
+fi
 if command -v node >/dev/null; then ok "node presente"; else warn "node no encontrado (opcional: validación de sintaxis del plugin)"; fi
 if [ "$WITH_SCHEDULE" = 1 ] && [ "$OS" = "Linux" ]; then
   command -v crontab >/dev/null || die "falta crontab (lo requiere --with-schedule en Linux); instala cron o ejecuta sin --with-schedule. No se modificó el vault"
 fi
+# git commit needs an author. `git var` matches what commit will resolve, including
+# Apple Git's automatic identity. Check it before the vault is created or changed.
+if [ "$WIRE" = 0 ]; then
+  if [ -d "$VAULT/.git" ]; then
+    git_ident() { git -C "$VAULT" var "$1" >/dev/null 2>&1; }
+  else
+    git_ident() { git var "$1" >/dev/null 2>&1; }
+  fi
+  if ! git_ident GIT_AUTHOR_IDENT || ! git_ident GIT_COMMITTER_IDENT; then
+    die "git no tiene identidad (user.name y user.email). Configúrala antes de continuar. No se modificó el vault"
+  fi
+  ok "identidad git presente"
+fi
+
+EXAMPLE="$PKG/templates/brain-config.example.json"
+[ -f "$EXAMPLE" ] || die "paquete incompleto: falta templates/brain-config.example.json. No se modificó el vault"
 
 if [ "$WIRE" = 0 ]; then mkdir -p "$VAULT"; fi
 VAULT="$(cd "$VAULT" && pwd)"
@@ -199,6 +248,47 @@ managed_link() {
   PENDING_LINKS+=("$rel" "$dst")
 }
 
+managed_copy_tree() {
+  local src="$1" dst="$2" rel="$3"
+  src="${src%/}"
+  if ! safe_parent "$dst"; then
+    warn "directorio padre symlink preservado: $rel"
+    return 0
+  fi
+  if [ -L "$dst" ]; then
+    warn "symlink existente preservado: $rel"
+    return 0
+  fi
+  if [ -e "$dst" ]; then
+    if ! owner_manifest tree-matches "$rel" "$dst" >/dev/null 2>&1; then
+      warn "árbol existente no administrado preservado: $rel"
+      return 0
+    fi
+    rm -rf "$dst"
+  fi
+  mkdir -p "$(dirname "$dst")"
+  cp -R "$src" "$dst"
+  owner_manifest record-tree "$rel" "$dst" || die "no se pudo registrar la propiedad de $rel"
+}
+
+wire_file() {
+  local src="$1" dst="$2" rel="$3" link_target="$4" mode="${5:-}"
+  if [ "$WIRE_MODE" = "copy" ]; then
+    managed_copy "$src" "$dst" "$rel" "$mode"
+  else
+    managed_link "$link_target" "$dst" "$rel"
+  fi
+}
+
+wire_tree() {
+  local src="$1" dst="$2" rel="$3" link_target="$4"
+  if [ "$WIRE_MODE" = "copy" ]; then
+    managed_copy_tree "$src" "$dst" "$rel"
+  else
+    managed_link "$link_target" "$dst" "$rel"
+  fi
+}
+
 echo "== 1. Carpetas canónicas del vault =="
 if [ "$WIRE" = 0 ]; then
   for d in "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "💼 Business/Engagements" "🚀 I+D/Herramientas" "🚀 I+D/Investigación" \
@@ -244,21 +334,33 @@ else
 fi
 [ -f "$R/SKILL.md" ] || die "el clon no tiene SKILL.md — revisa $R"
 
-echo "== 3. Cablear skills y comandos (symlinks relativos, sin copias) =="
+if [ "$WIRE_MODE" = "copy" ]; then
+  echo "== 3. Cablear skills y comandos (copias, sin symlinks) =="
+else
+  echo "== 3. Cablear skills y comandos (symlinks relativos, sin copias) =="
+fi
 for d in "$R"/skills/*/; do
   n="$(basename "$d")"; [ "$n" = "ai-brain-starter" ] && continue
   l="$VAULT/.opencode/skills/$n"
-  managed_link "ai-brain-starter/skills/$n" "$l" ".opencode/skills/$n"
+  wire_tree "$d" "$l" ".opencode/skills/$n" "ai-brain-starter/skills/$n"
 done
 flush_links
-ok "$(find "$VAULT/.opencode/skills" -maxdepth 1 -mindepth 1 | wc -l | tr -d ' ') skills enlazadas"
+if [ "$WIRE_MODE" = "copy" ]; then
+  ok "$(find "$VAULT/.opencode/skills" -maxdepth 1 -mindepth 1 -type d ! -name ai-brain-starter ! -name humanizer | wc -l | tr -d ' ') skills copiadas"
+else
+  ok "$(find "$VAULT/.opencode/skills" -maxdepth 1 -mindepth 1 | wc -l | tr -d ' ') skills enlazadas"
+fi
 mkdir -p "$VAULT/.opencode/commands"
 for f in "$R"/commands/*.md; do
   n="$(basename "$f")"; l="$VAULT/.opencode/commands/$n"
-  managed_link "../skills/ai-brain-starter/commands/$n" "$l" ".opencode/commands/$n"
+  wire_file "$f" "$l" ".opencode/commands/$n" "../skills/ai-brain-starter/commands/$n"
 done
 flush_links
-ok "$(ls -1 "$VAULT/.opencode/commands" | wc -l | tr -d ' ') comandos enlazados"
+if [ "$WIRE_MODE" = "copy" ]; then
+  ok "$(find "$VAULT/.opencode/commands" -maxdepth 1 -mindepth 1 -type f | wc -l | tr -d ' ') comandos copiados"
+else
+  ok "$(ls -1 "$VAULT/.opencode/commands" | wc -l | tr -d ' ') comandos enlazados"
+fi
 
 echo "== 3b. Scripts del vendor que los skills invocan (symlinks a ⚙️ Meta/scripts) =="
 mkdir -p "$VAULT/⚙️ Meta/scripts"
@@ -266,11 +368,19 @@ n_scripts=0
 for f in "$R"/scripts/*.py "$R"/scripts/*.sh; do
   [ -f "$f" ] || continue
   n="$(basename "$f")"; l="$VAULT/⚙️ Meta/scripts/$n"
-  managed_link "../../.opencode/skills/ai-brain-starter/scripts/$n" "$l" "⚙️ Meta/scripts/$n"
-  [ -L "$l" ] && [ "$(readlink "$l")" = "../../.opencode/skills/ai-brain-starter/scripts/$n" ] && n_scripts=$((n_scripts+1))
+  wire_file "$f" "$l" "⚙️ Meta/scripts/$n" "../../.opencode/skills/ai-brain-starter/scripts/$n"
+  if [ "$WIRE_MODE" = "copy" ]; then
+    [ -f "$l" ] && [ ! -L "$l" ] && n_scripts=$((n_scripts+1))
+  else
+    [ -L "$l" ] && [ "$(readlink "$l")" = "../../.opencode/skills/ai-brain-starter/scripts/$n" ] && n_scripts=$((n_scripts+1))
+  fi
 done
 flush_links
-ok "$n_scripts scripts enlazados (build-journal-index, journal-preflight, drift-detection...)"
+if [ "$WIRE_MODE" = "copy" ]; then
+  ok "$n_scripts scripts copiados (build-journal-index, journal-preflight, drift-detection...)"
+else
+  ok "$n_scripts scripts enlazados (build-journal-index, journal-preflight, drift-detection...)"
+fi
 
 echo "== 4. humanizer (MIT, lo usa la regla de humanización) =="
 H="$VAULT/.opencode/skills/humanizer"
@@ -312,21 +422,36 @@ elif [ -n "$CONFIG" ]; then
   if [ -f "$BRC" ]; then cp "$BRC" "$BRC.bak.$(date +%Y%m%d-%H%M%S)" && warn "backup de la config previa"; fi
   cp "$CONFIG" "$BRC" && ok "config sembrada desde $CONFIG"
 elif [ ! -f "$BRC" ]; then
-  cp "$PKG/templates/brain-config.example.json" "$BRC"
-  python3 - "$BRC" "$SLUG" <<'PZ'
+  cp "$EXAMPLE" "$BRC"
+  python3 - "$BRC" "$SLUG" <<'PZ' || die "no se pudo sembrar brain-config.json desde templates/brain-config.example.json"
 import json, os, pathlib, re, sys
-p = pathlib.Path(sys.argv[1]); d = json.loads(p.read_text())
+p = pathlib.Path(sys.argv[1])
+try:
+    d = json.loads(p.read_text(encoding="utf-8"))
+except Exception as error:
+    raise SystemExit("no es JSON válido: " + str(error))
+if not isinstance(d, dict):
+    raise SystemExit("debe ser un objeto JSON")
 tz = ""
+detected = False
 try:
     link = os.readlink("/etc/localtime")
     m = re.search(r"zoneinfo/(.+)$", link)
-    if m: tz = m.group(1)
+    if m: tz = m.group(1); detected = True
 except Exception:
     pass
-d["timezone"] = tz or "UTC"
+fallback_tz = d.get("timezone")
+if not tz:
+    if not isinstance(fallback_tz, str) or not fallback_tz.strip():
+        raise SystemExit("no declara timezone")
+    tz = fallback_tz.strip()
+d["timezone"] = tz
 d["vault_name"] = sys.argv[2]
-p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
-print("  + config por defecto creada (zona horaria detectada: " + d["timezone"] + ")")
+p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+if detected:
+    print("  + config por defecto creada (zona horaria detectada: " + tz + ")")
+else:
+    print("  ! config por defecto creada (zona horaria NO detectada; se usa " + tz + ") — ajústala en ⚙️ Meta/brain-config.json")
 PZ
 else
   ok "brain-config.json presente"
@@ -338,11 +463,12 @@ if [ "$WIRE" = 1 ]; then
 elif [ -f "$VAULT/AGENTS.md" ]; then
   ok "AGENTS.md existe — preservado (nunca se sobrescribe contenido personal)"
 else
-  python3 - "$R/templates/generated/claude-md-template.md" "$PKG/templates/agents-opencode-appendix.md" "$BRC" "$VAULT/AGENTS.md" <<'PYGEN'
+  python3 - "$R/templates/generated/claude-md-template.md" "$PKG/templates/agents-opencode-appendix.md" "$BRC" "$VAULT/AGENTS.md" "$EXAMPLE" <<'PYGEN' || die "fallo generando AGENTS.md"
 import json, pathlib, re, sys
 tpl = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
 app = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
 cfg = json.load(open(sys.argv[3], encoding="utf-8"))
+example = json.load(open(sys.argv[5], encoding="utf-8"))
 if not isinstance(cfg, dict):
     cfg = {}
 out = pathlib.Path(sys.argv[4])
@@ -353,6 +479,16 @@ def section(name):
 
 def text(value, default):
     return value.strip() if isinstance(value, str) and value.strip() else default
+
+def from_example(path):
+    cur = example
+    for key in path.split("."):
+        if not isinstance(cur, dict) or key not in cur:
+            raise SystemExit("paquete incompleto: templates/brain-config.example.json no declara " + path)
+        cur = cur[key]
+    if not isinstance(cur, str) or not cur.strip():
+        raise SystemExit("paquete incompleto: templates/brain-config.example.json no declara " + path)
+    return cur.strip()
 
 def words(value):
     if not isinstance(value, list):
@@ -382,15 +518,15 @@ vault_map = """Carpetas del vault (adaptación OpenCode). Los nombres van en ing
 Antes de crear cualquier cosa: revisa este mapa y ⚙️ Meta/Folder Resolvers/."""
 src = re.sub(r"## Vault Map\n\[FILL THIS IN.*?\]", "## Vault Map\n" + vault_map, src, flags=re.S)
 for k, v in {
-    "{{LANGUAGE}}": text(cfg.get("language"), "es"),
-    "{{JOURNAL_TIME}}": text(journal.get("time"), "20:30"),
-    "{{TIMEZONE}}": text(cfg.get("timezone"), "UTC"),
+    "{{LANGUAGE}}": text(cfg.get("language"), from_example("language")),
+    "{{JOURNAL_TIME}}": text(journal.get("time"), from_example("journal.time")),
+    "{{TIMEZONE}}": text(cfg.get("timezone"), from_example("timezone")),
     "{{HABITS}}": words(cfg.get("habits")) or "ninguno",
     "{{ACCOUNTABILITY}}": words(cfg.get("accountability")) or "a definir en la entrevista",
-    "{{VAULT_NAME}}": text(cfg.get("vault_name"), "mi-cerebro"),
-    "{{INSIGHTS_TIME}}": text(schedule.get("insights_time"), "21:00"),
-    "{{MAINTENANCE_TIME}}": text(schedule.get("maintenance_time"), "03:30"),
-    "{{UPDATE_TIME}}": text(schedule.get("update_time"), "08:00"),
+    "{{VAULT_NAME}}": text(cfg.get("vault_name"), from_example("vault_name")),
+    "{{INSIGHTS_TIME}}": text(schedule.get("insights_time"), from_example("schedule.insights_time")),
+    "{{MAINTENANCE_TIME}}": text(schedule.get("maintenance_time"), from_example("schedule.maintenance_time")),
+    "{{UPDATE_TIME}}": text(schedule.get("update_time"), from_example("schedule.update_time")),
 }.items():
     app = app.replace(k, v)
 header = ("<!-- Generado por install.sh desde el template de ai-brain-starter + adaptación OpenCode. "
@@ -399,7 +535,11 @@ out.write_text(header + src.rstrip() + "\n\n" + app + "\n", encoding="utf-8")
 PYGEN
   [ -f "$VAULT/AGENTS.md" ] && ok "AGENTS.md generado (plantilla + adaptación OpenCode)" || die "fallo generando AGENTS.md"
 fi
-managed_link "AGENTS.md" "$VAULT/CLAUDE.md" "CLAUDE.md"
+if [ "$WIRE_MODE" = "copy" ]; then
+  wire_file "$VAULT/AGENTS.md" "$VAULT/CLAUDE.md" "CLAUDE.md" "AGENTS.md"
+else
+  managed_link "AGENTS.md" "$VAULT/CLAUDE.md" "CLAUDE.md"
+fi
 flush_links
 
 echo "== 9. Plugin brain-vault (hooks OpenCode) =="
@@ -421,6 +561,7 @@ for f in "$PKG"/templates/jobs/*.sh; do
 done
 managed_copy "$PKG/scripts/verify.sh" "$VAULT/scripts/verify.sh" "scripts/verify.sh" 0755
 managed_copy "$PKG/scripts/lib/ownership.py" "$VAULT/scripts/lib/ownership.py" "scripts/lib/ownership.py" 0644
+managed_copy "$PKG/scripts/lib/python3.sh" "$VAULT/scripts/lib/python3.sh" "scripts/lib/python3.sh" 0644
 ok "$n_jobs trabajos gestionados"
 
 echo "== 11. Git del vault (respaldo local) =="
@@ -561,7 +702,8 @@ else
   if git -C "$VAULT" diff --cached --quiet; then
     ok "sin cambios por confirmar"
   else
-    git -C "$VAULT" commit -q -m "chore: bootstrap ai-brain OpenCode vault" && ok "commit base"
+    git -C "$VAULT" commit -q -m "chore: bootstrap ai-brain OpenCode vault"
+    ok "commit base"
   fi
 fi
 

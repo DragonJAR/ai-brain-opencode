@@ -1,11 +1,11 @@
 # ai-brain-opencode
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20WSL2-green.svg)](docs/COMPAT.md)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows%20%7C%20WSL2-green.svg)](docs/COMPAT.md)
 [![Author](https://img.shields.io/badge/author-DragonJAR%20SAS-orange.svg)](https://www.dragonjar.org)
 [![English](https://img.shields.io/badge/leer%20en-English-blue.svg)](README.md)
 
-> Cerebro personal: un vault de markdown en tu disco, impulsado por OpenCode V2—sin nube obligatoria y sin datos personales en el paquete.
+> Cerebro personal: un vault de markdown en tu disco, impulsado por OpenCode V2 — sin nube obligatoria y sin datos personales en el paquete.
 
 ## Qué es esto
 
@@ -23,7 +23,7 @@
 | `.opencode/plugins/brain-vault/index.js` | Plugin OpenCode (contexto, cierre, reunión, frontmatter) |
 | `AGENTS.md` (+ `CLAUDE.md` → `AGENTS.md`) | Memoria del cerebro por sesión |
 | `⚙️ Meta/brain-config.json` | Idioma, zona, hora del diario, hábitos, horarios |
-| `scripts/verify.sh`, `scripts/lib/ownership.py`, `scripts/jobs/*.sh` | Salud del vault, propiedad, trabajos |
+| `scripts/verify.sh`, `scripts/lib/ownership.py`, `scripts/lib/python3.sh`, `scripts/jobs/*.sh` | Salud del vault, propiedad, detección de Python, trabajos |
 | `.opencode/brain-vault-install-manifest.json` | Huellas de propiedad para desinstalar con seguridad |
 | `opencode.json` | **Solo** con `--with-mcp` (servidores MCP remotos) |
 
@@ -33,16 +33,16 @@
 |---|---|
 | [OpenCode](https://opencode.ai/docs) con un modelo configurado | Runtime que carga el vault y el plugin |
 | Git | Clonar starter + humanizer; commit base del vault |
-| Python 3.10+ (`python3` en `PATH`) | Instalador, ownership y helpers del diario (el instalador comprueba `python3`) |
+| Python 3.9+ (`python3`, `py -3` o `python` en `PATH`) | Instalador, ownership y helpers del diario (el instalador valida la versión) |
 | Node 18+ (opcional) | Si está, el instalador corre `node --check` sobre el plugin |
-| macOS o Linux (o WSL2 Ubuntu) | Symlinks POSIX + launchd/cron |
+| macOS, Linux, WSL2 Ubuntu o Windows nativo (Git Bash) | POSIX: symlinks + launchd/cron · Windows: copias de archivo + **schtasks** |
 | Obsidian (opcional) | Ver el vault; `--with-obsidian` instala cinco plugins comunitarios |
 
 ## Instalación
 
 ```bash
 git clone https://github.com/DragonJAR/ai-brain-opencode.git
-cd ai-brain-opencode   # o tu checkout local de este paquete
+cd ai-brain-opencode
 bash install.sh ~/ruta/a/mi-cerebro
 ```
 
@@ -54,7 +54,7 @@ La ruta del vault es **siempre explícita**. No detecta vaults automáticamente 
 | `--wire` | Re-enlaza un vault existente tras actualizar el starter (sin clonar/scaffold; puede ir con `--with-schedule`) |
 | `--with-mcp` | Añade MCP remotos `granola` + `chatprd` en el `opencode.json` del vault (envían conversación al usarlos—opt-in) |
 | `--with-obsidian` | Instala cinco plugins comunitarios de Obsidian bajo `.obsidian/plugins/` |
-| `--with-schedule` | Registra trabajos (launchd en macOS, cron en Linux) |
+| `--with-schedule` | Registra trabajos (launchd en macOS, cron en Linux, schtasks en Windows) |
 
 También acepta: `--help` / `-h`, y `--yes` / `-y` (sin preguntas; el instalador no es interactivo).
 
@@ -68,7 +68,7 @@ bash install.sh ~/ruta/a/mi-cerebro --wire
 ## Verificación
 
 ```bash
-bash tests/run.sh                 # regresiones del paquete (fixtures aislados)
+bash tests/run.sh                 # suite de regresiones del paquete
 bash <vault>/scripts/verify.sh    # salud del vault: estructura, symlinks, config, plugin, propiedad
 ```
 
@@ -138,8 +138,8 @@ En **WSL2**, cron no arranca solo: `sudo service cron start` (el instalador avis
 |---|---|
 | macOS | Completo: symlinks + **launchd** |
 | Linux | Completo: symlinks + **cron** |
-| WSL2 (Ubuntu) | Dentro de WSL; arranca **cron** a mano |
-| Windows nativo | **No soportado por diseño** (symlinks POSIX + launchd/cron). Usa WSL2. El instalador rechaza `MINGW*`/`MSYS*`/`CYGWIN*` antes de mutar el vault. |
+| WSL2 (Ubuntu) | Dentro de WSL; arranca **cron** a mano (`sudo service cron start`) |
+| Windows nativo (Git Bash) | Implementado: **copias de archivo** (sin symlinks del paquete) + **schtasks**. Requiere `git`, Python ≥3.9, `bash`, `cygpath` y `opencode run --help`. **No** hace falta Developer Mode. Evidencia: cubierto con fixtures simulados de Windows (`uname`/`schtasks` mock); falta validación en hardware real, así que abre un issue si algo falla. WSL2 sigue siendo una alternativa válida. |
 
 ## Desinstalación
 

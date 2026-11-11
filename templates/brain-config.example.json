@@ -14,12 +14,8 @@
   "accountability": [],
   "extra_rules": [],
   "schedule": {
-    "enabled": true,
-    "insights_day": "Sunday",
     "insights_time": "21:00",
     "maintenance_time": "03:30",
-    "update_day": "Monday",
     "update_time": "08:00"
-  },
-  "mcp": []
+  }
 }

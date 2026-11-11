@@ -52,6 +52,13 @@ documentada permite mutar input, no bloquear), guardias de shell (`ctx.shell.hoo
 inyección de contexto de CRM/instintos, compactación con resumen propio, verificación de claims contra evidencia de
 hooks, y el chequeo de zona horaria en eventos de calendario.
 
+## Plataformas
+
+macOS y Linux están soportados de punta a punta. **Windows nativo no**: el cerebro se apoya en symlinks POSIX
+(`ln -s` sin privilegios), rutas con emoji y launchd/cron; en Git Bash `ln -s` copia en lugar de enlazar y el
+scheduler no existe. En Windows usa **WSL2 con Ubuntu** y ejecuta todo dentro de WSL. El instalador y el
+scheduler rechazan Windows nativo antes de tocar el vault y nombran WSL2 como la salida.
+
 ## Cómo se compensa la diferencia de bloqueo
 
 Claude Code bloquea una llamada con exit code 2. OpenCode documenta mutación de input, no bloqueo. Por eso el
@@ -61,6 +68,17 @@ cada sesión.
 
 ## Verificación del puerto
 
-La suite de validación del paquete (headless, carga del plugin, hook de contexto, hook de cierre, hook de write,
-los cuatro trabajos programados) dio PASS en la máquina de referencia. `scripts/verify.sh` comprueba la
-instalación en cualquier máquina.
+La instalación se configura explícitamente para cada proyecto: el usuario proporciona la ruta del vault y el
+instalador no realiza detección global ni modifica la configuración global de OpenCode.
+
+Desde el checkout del paquete, `bash tests/run.sh` y `bash scripts/verify.sh` ejecutan las regresiones determinísticas
+con fixtures aislados. Desde un vault instalado, `bash <vault>/scripts/verify.sh` comprueba archivos y herramientas
+locales, y **sale con código 1** si algo falla. Estas pruebas no arrancan OpenCode V2 ni comprueban que un runtime cargue los hooks; esa validación requiere
+un smoke test explícito de runtime y no se afirma aquí.
+
+## Registro de propiedad
+
+`install.sh`, `scripts/schedule.sh` y `uninstall.sh` comparten `scripts/lib/ownership.py`: un único lugar para el
+sellado, la validación y las huellas del manifiesto. `install.sh` copia ese archivo al vault, de modo que
+`<vault>/scripts/verify.sh` puede validar el manifiesto sin el checkout del paquete.
+

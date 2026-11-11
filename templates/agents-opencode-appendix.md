@@ -1,6 +1,6 @@
 ## Adaptación OpenCode (generada por install.sh)
 
-Esta sección la genera el instalador. No la edites a mano: se regenera al re-ejecutar `--wire`.
+Se genera en la primera instalación, junto con el resto de `AGENTS.md`. Ninguna re-ejecución la sobrescribe: si necesitas regenerarla, borra `AGENTS.md` y vuelve a instalar.
 
 ### Idioma
 Responde y escribe en {{LANGUAGE}}. Los nombres de carpeta quedan en inglés a propósito: los skills del sistema tienen rutas fijas y traducirlos genera carpetas duplicadas.
@@ -28,7 +28,8 @@ Responde y escribe en {{LANGUAGE}}. Los nombres de carpeta quedan en inglés a p
 - Verificación: `bash scripts/verify.sh`.
 
 ### Scheduler (si se instaló con `--with-schedule`)
-- Recordatorio del diario: {{JOURNAL_TIME}} (notificación del sistema operativo).
-- Revisión semanal: domingo 21:00 (headless con `opencode run "/insights"`, solo si hay entradas).
-- Mantenimiento diario: 03:30 (índice del diario + snapshot git).
-- Actualización del starter: lunes 08:00.
+Los horarios salen de `⚙️ Meta/brain-config.json`; los días son fijos.
+- Recordatorio del diario: {{JOURNAL_TIME}} ({{TIMEZONE}}), de lunes a viernes — notificación del sistema operativo.
+- Revisión semanal: domingo {{INSIGHTS_TIME}} (headless con `opencode run "/insights"`, solo si hay entradas).
+- Mantenimiento diario: {{MAINTENANCE_TIME}} (índice del diario + snapshot git).
+- Actualización del starter: lunes {{UPDATE_TIME}}.

@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASH_BIN="$(command -v bash)"
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ai-brain-t3-test.XXXXXX")"
+trap 'rm -rf "$TMP_ROOT"' EXIT
+
+failures=0
+fail() {
+  printf 'FAIL: %s\n' "$1" >&2
+  failures=$((failures + 1))
+}
+
+# The README configuration example must be strict JSON, not JSONC.
+if python3 - "$PKG/README.md" >/dev/null 2>&1 <<'PY'
+import json, pathlib, re, sys
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r"## Configuración:.*?```json\s*\n(.*?)\n```", text, re.S)
+if not match:
+    raise SystemExit("README configuration JSON block not found")
+json.loads(match.group(1))
+PY
+then
+  :
+else
+  fail "README configuration example does not parse as strict JSON"
+fi
+
+if ! grep -Fq 'No detecta vaults automáticamente ni modifica la configuración global de OpenCode.' "$PKG/README.md"; then
+  fail "README does not state that setup is explicit and project-scoped"
+fi
+if ! grep -Fq 'no realiza detección global' "$PKG/docs/COMPAT.md"; then
+  fail "compatibility guide does not rule out global vault detection"
+fi
+if ! grep -Fq 'no arrancan OpenCode V2 ni comprueban que un runtime cargue los hooks' "$PKG/docs/COMPAT.md"; then
+  fail "compatibility guide does not distinguish deterministic tests from live runtime checks"
+fi
+
+# Package-mode verify must invoke the adjacent test runner and propagate its status.
+VERIFY_FIXTURE="$TMP_ROOT/verify-package"
+mkdir -p "$VERIFY_FIXTURE/scripts" "$VERIFY_FIXTURE/tests" "$VERIFY_FIXTURE/templates"
+cp "$PKG/scripts/verify.sh" "$VERIFY_FIXTURE/scripts/verify.sh"
+: > "$VERIFY_FIXTURE/install.sh"
+: > "$VERIFY_FIXTURE/templates/brain-config.example.json"
+cat > "$VERIFY_FIXTURE/tests/run.sh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' invoked > "$VERIFY_MARKER"
+exit "$VERIFY_EXIT"
+SH
+VERIFY_MARKER="$TMP_ROOT/verify-runner.marker"
+if VERIFY_MARKER="$VERIFY_MARKER" VERIFY_EXIT=23 "$BASH_BIN" "$VERIFY_FIXTURE/scripts/verify.sh" > "$TMP_ROOT/package-verify.txt" 2>&1; then
+  verify_status=0
+else
+  verify_status=$?
+fi
+if [ "$verify_status" -ne 23 ]; then
+  fail "package verifier did not propagate the regression runner exit status (got $verify_status)"
+fi
+if [ ! -f "$VERIFY_MARKER" ]; then
+  fail "package verifier did not invoke the package regression runner"
+fi
+
+# Build a temporary vault and local source stubs; install tests never use a real vault.
+VAULT="$TMP_ROOT/vault"
+MOCK_STARTER="$VAULT/.opencode/skills/ai-brain-starter"
+MOCK_CRONTAB_STATE="$TMP_ROOT/crontab-state"
+MOCK_CRONTAB_CALLS="$TMP_ROOT/crontab-calls.log"
+MOCK_CRONTAB_WRITES="$TMP_ROOT/crontab-writes.log"
+MOCK_GIT_CALLS="$TMP_ROOT/git-calls.log"
+mkdir -p "$TMP_ROOT/bin" "$VAULT"
+MOCK_UNAME=Linux
+
+. "$PKG/tests/lib/mocks.sh"
+ai_brain_mock_platform "$TMP_ROOT/bin"
+ai_brain_mock_crontab "$TMP_ROOT/bin"
+ai_brain_mock_git "$TMP_ROOT/bin"
+cat > "$TMP_ROOT/bin/opencode" <<'SH'
+#!/bin/sh
+exit 0
+SH
+chmod +x "$TMP_ROOT/bin/opencode"
+
+export MOCK_UNAME MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES MOCK_GIT_CALLS
+export PATH="$TMP_ROOT/bin:$PATH"
+export BRAIN_STARTER_UPDATE=0
+unset BRAIN_STARTER_PIN || true
+
+if ! MOCK_VAULT="$VAULT" "$BASH_BIN" "$PKG/install.sh" "$VAULT" > "$TMP_ROOT/install.txt" 2>&1; then
+  fail "initial fixture installation failed; see isolated install output"
+  cat "$TMP_ROOT/install.txt" >&2
+else
+  # Simulate user edits and a starter update without touching files outside this fixture.
+  printf 'user-owned AGENTS content\n' > "$VAULT/AGENTS.md"
+  python3 - "$VAULT/⚙️ Meta/brain-config.json" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+data["user_note"] = "preserve this value"
+path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+  cp "$VAULT/AGENTS.md" "$TMP_ROOT/agents.snapshot"
+  cp "$VAULT/⚙️ Meta/brain-config.json" "$TMP_ROOT/brain-config.snapshot"
+  printf 'user-owned scheduled job\n' > "$VAULT/scripts/jobs/journal-reminder.sh"
+  cp "$VAULT/scripts/jobs/journal-reminder.sh" "$TMP_ROOT/job.snapshot"
+  rm -rf "$VAULT/📓 Journals"
+  rm -f "$VAULT/⚙️ Meta/journal-config.md"
+  mkdir -p "$MOCK_STARTER/skills/new-skill" "$MOCK_STARTER/commands"
+  printf '# Added skill after starter update\n' > "$MOCK_STARTER/skills/new-skill/SKILL.md"
+  printf '# Added command after starter update\n' > "$MOCK_STARTER/commands/new-command.md"
+  cp "$MOCK_GIT_CALLS" "$TMP_ROOT/git-before-wire.log"
+
+  if ! MOCK_VAULT="$VAULT" "$BASH_BIN" "$PKG/install.sh" "$VAULT" --wire --with-schedule > "$TMP_ROOT/wire.txt" 2>&1; then
+    fail "--wire failed for the existing isolated vault"
+    cat "$TMP_ROOT/wire.txt" >&2
+  fi
+  if [ ! -L "$VAULT/.opencode/skills/new-skill" ] || [ ! -f "$VAULT/.opencode/skills/new-skill/SKILL.md" ]; then
+    fail "--wire did not link the skill added by the updated starter"
+  fi
+  if [ ! -L "$VAULT/.opencode/commands/new-command.md" ] || [ ! -f "$VAULT/.opencode/commands/new-command.md" ]; then
+    fail "--wire did not link the command added by the updated starter"
+  fi
+  if [ -e "$VAULT/📓 Journals" ] || [ -e "$VAULT/⚙️ Meta/journal-config.md" ]; then
+    fail "--wire re-scaffolded a removed vault directory or config file"
+  fi
+  if ! cmp -s "$VAULT/AGENTS.md" "$TMP_ROOT/agents.snapshot"; then
+    fail "--wire overwrote user-owned AGENTS.md content"
+  fi
+  if ! cmp -s "$VAULT/⚙️ Meta/brain-config.json" "$TMP_ROOT/brain-config.snapshot"; then
+    fail "--wire overwrote user-owned brain configuration"
+  fi
+  if ! cmp -s "$VAULT/scripts/jobs/journal-reminder.sh" "$TMP_ROOT/job.snapshot"; then
+    fail "--wire overwrote a user-modified scheduled job"
+  fi
+  if ! cmp -s "$MOCK_GIT_CALLS" "$TMP_ROOT/git-before-wire.log"; then
+    fail "--wire invoked git clone or changed the vault git state"
+  fi
+  if [ ! -s "$MOCK_CRONTAB_WRITES" ]; then
+    fail "--wire --with-schedule did not reconcile through the crontab stub"
+  fi
+fi
+
+# The base commit must stage the managed artifacts and the empty structure.
+if ! grep -Eq 'add -- .*\.opencode' "$MOCK_GIT_CALLS"; then
+  fail "installer did not stage managed artifacts in the base commit"
+fi
+if ! grep -Eq 'add -- .*(📓 Journals|⚙️ Meta)/\.gitkeep' "$MOCK_GIT_CALLS"; then
+  fail "base commit did not stage the empty vault structure"
+fi
+if ! grep -Fq 'commit -q -m chore: bootstrap ai-brain OpenCode vault' "$MOCK_GIT_CALLS"; then
+  fail "installer did not create the base commit"
+fi
+
+# Native Windows must be rejected before any mutation, with WSL2 as the path.
+WINDOWS_VAULT="$TMP_ROOT/windows-vault"
+mkdir -p "$WINDOWS_VAULT"
+printf 'keep\n' > "$WINDOWS_VAULT/keep.txt"
+if MOCK_UNAME=MINGW64_NT-10.0 "$BASH_BIN" "$PKG/install.sh" "$WINDOWS_VAULT" > "$TMP_ROOT/windows.txt" 2>&1; then
+  fail "installer accepted native Windows"
+fi
+if ! grep -Fq 'WSL2' "$TMP_ROOT/windows.txt"; then
+  fail "Windows rejection did not point at WSL2"
+fi
+if [ ! -f "$WINDOWS_VAULT/keep.txt" ] || [ -e "$WINDOWS_VAULT/.opencode" ]; then
+  fail "Windows rejection modified the target"
+fi
+
+# A vault health check with failures must exit non-zero.
+BROKEN_VAULT="$TMP_ROOT/broken-vault"
+mkdir -p "$BROKEN_VAULT/scripts"
+cp "$PKG/scripts/verify.sh" "$BROKEN_VAULT/scripts/verify.sh"
+if "$BASH_BIN" "$BROKEN_VAULT/scripts/verify.sh" > "$TMP_ROOT/broken-verify.txt" 2>&1; then
+  fail "vault verifier exited 0 for a broken vault"
+fi
+if ! grep -Fq 'fallos' "$TMP_ROOT/broken-verify.txt"; then
+  fail "vault verifier did not report the failure count"
+fi
+
+# The missing-OpenCode preflight must leave an existing target byte-for-byte unchanged.
+NO_OPENCODE_BIN="$TMP_ROOT/no-opencode-bin"
+MISSING_VAULT="$TMP_ROOT/no-opencode-vault"
+mkdir -p "$NO_OPENCODE_BIN" "$MISSING_VAULT"
+printf 'existing user data\n' > "$MISSING_VAULT/keep.txt"
+for command_name in dirname mkdir basename tr sed python3 node find wc ln readlink cp chmod ls cat grep date head tail rm cut sort; do
+  if resolved="$(command -v "$command_name")"; then
+    ln -s "$resolved" "$NO_OPENCODE_BIN/$command_name"
+  fi
+done
+ln -s "$TMP_ROOT/bin/uname" "$NO_OPENCODE_BIN/uname"
+ln -s "$TMP_ROOT/bin/git" "$NO_OPENCODE_BIN/git"
+find "$MISSING_VAULT" -mindepth 1 -print | sort > "$TMP_ROOT/no-opencode-before.txt"
+if PATH="$NO_OPENCODE_BIN" MOCK_VAULT="$MISSING_VAULT" "$BASH_BIN" "$PKG/install.sh" "$MISSING_VAULT" > "$TMP_ROOT/no-opencode.txt" 2>&1; then
+  fail "installer succeeded without the required OpenCode CLI"
+fi
+if ! grep -Fq 'OpenCode CLI' "$TMP_ROOT/no-opencode.txt" || ! grep -Fq 'No se modificó el vault' "$TMP_ROOT/no-opencode.txt"; then
+  fail "missing-OpenCode error did not explain the prerequisite and no-mutation guarantee"
+fi
+find "$MISSING_VAULT" -mindepth 1 -print | sort > "$TMP_ROOT/no-opencode-after.txt"
+if ! cmp -s "$TMP_ROOT/no-opencode-before.txt" "$TMP_ROOT/no-opencode-after.txt"; then
+  fail "installer mutated the vault before reporting missing OpenCode"
+fi
+
+if [ "$failures" -gt 0 ]; then
+  printf 'FAIL: T3 installer and verification contract had %s failed assertions\n' "$failures" >&2
+  exit 1
+fi
+
+printf 'PASS: T3 wire, OpenCode preflight, strict JSON, and package verifier contracts\n'

@@ -11,77 +11,15 @@ MOCK_CRONTAB_STATE="$TMP_ROOT/crontab-state"
 MOCK_CRONTAB_CALLS="$TMP_ROOT/crontab-calls.log"
 MOCK_CRONTAB_WRITES="$TMP_ROOT/crontab-writes.log"
 MOCK_VAULT="$VAULT"
+MOCK_GIT_CALLS="$TMP_ROOT/git-calls.log"
 mkdir -p "$TMP_ROOT/bin" "$VAULT/.opencode/skills" "$VAULT/.opencode/commands" \
   "$VAULT/.opencode/plugins/brain-vault" "$VAULT/scripts/jobs" \
   "$VAULT/⚙️ Meta" "$TMP_ROOT/foreign/ai-brain-starter-legacy"
 
-cat > "$TMP_ROOT/bin/uname" <<'SH'
-#!/bin/sh
-printf '%s\n' Linux
-SH
-cat > "$TMP_ROOT/bin/crontab" <<'SH'
-#!/bin/sh
-printf '%s\n' "$*" >> "$MOCK_CRONTAB_CALLS"
-case "${1:-}" in
-  -l)
-    [ -f "$MOCK_CRONTAB_STATE" ] || { printf 'no crontab for mock user\n' >&2; exit 1; }
-    cat "$MOCK_CRONTAB_STATE"
-    ;;
-  -)
-    printf '%s\n' "$*" >> "$MOCK_CRONTAB_WRITES"
-    cat > "$MOCK_CRONTAB_STATE"
-    ;;
-  *)
-    printf '%s\n' "$*" >> "$MOCK_CRONTAB_WRITES"
-    if [ -f "${1:-}" ]; then cat "$1" > "$MOCK_CRONTAB_STATE"; fi
-    ;;
-esac
-SH
-cat > "$TMP_ROOT/bin/git" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-if [ "${1:-}" = clone ]; then
-  destination="${@: -1}"
-  url="${@: -2:1}"
-  mkdir -p "$destination"
-  if [[ "$url" == *ai-brain-starter ]]; then
-    mkdir -p "$destination/skills/journal" "$destination/commands" \
-      "$destination/scripts" "$destination/floors" "$destination/templates/generated"
-    printf '# Stub starter skill\n' > "$destination/SKILL.md"
-    printf '# Stub journal skill\n' > "$destination/skills/journal/SKILL.md"
-    printf '# Stub command\n' > "$destination/commands/brain-journal.md"
-    cat > "$destination/scripts/generate_floor_stubs.py" <<'PY'
-from pathlib import Path
-floor = Path(__file__).resolve().parent.parent / "floors" / "stub-floor.md"
-floor.write_text("# Stub floor\n", encoding="utf-8")
-PY
-    printf '#!/bin/sh\nexit 0\n' > "$destination/scripts/vendor-job.sh"
-    cat > "$destination/templates/generated/claude-md-template.md" <<'MD'
-# Stub vault instructions
-
-## Vault Map
-[FILL THIS IN]
-MD
-  elif [[ "$url" == *humanizer.git ]]; then
-    printf '# Stub humanizer\n' > "$destination/README.md"
-  else
-    printf 'unexpected clone URL: %s\n' "$url" >&2
-    exit 91
-  fi
-  exit 0
-fi
-if [ "${1:-}" = -C ]; then
-  shift 2
-  case "${1:-}" in
-    log) printf 'deadbeef stub vendor\n'; exit 0 ;;
-    init) mkdir -p "$MOCK_VAULT/.git"; exit 0 ;;
-    status|add|commit) exit 0 ;;
-  esac
-fi
-printf 'unexpected git command: %s\n' "$*" >&2
-exit 92
-SH
-chmod +x "$TMP_ROOT/bin/uname" "$TMP_ROOT/bin/crontab" "$TMP_ROOT/bin/git"
+. "$PKG/tests/lib/mocks.sh"
+ai_brain_mock_platform "$TMP_ROOT/bin"
+ai_brain_mock_crontab "$TMP_ROOT/bin"
+ai_brain_mock_git "$TMP_ROOT/bin"
 
 printf '%s\n' '# User-managed schedule' '0 4 * * * echo keep-me # ai-brain vault-user' > "$MOCK_CRONTAB_STATE"
 printf '%s\n' 'external note' > "$TMP_ROOT/foreign/ai-brain-starter-legacy/keep.md"
@@ -100,7 +38,7 @@ cat > "$VAULT/opencode.json" <<'JSON'
 }
 JSON
 
-export MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES MOCK_VAULT MOCK_STARTER
+export MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES MOCK_VAULT MOCK_STARTER MOCK_GIT_CALLS
 export PATH="$TMP_ROOT/bin:$PATH"
 export TMPDIR="$TMP_ROOT"
 
@@ -120,6 +58,21 @@ assert all(line in current for line in manifest["cron_lines"]), "manifest claims
 PY
 then
   printf 'FAIL: corrected installer did not create a verifiable cron ownership manifest\n' >&2
+  failures=$((failures + 1))
+fi
+
+# The base commit stages the managed artifacts, the MCP config created after the
+# git section, and the empty structure — never only the first four paths.
+if ! grep -Eq 'add -- .*opencode\.json' "$MOCK_GIT_CALLS"; then
+  printf 'FAIL: base commit did not stage opencode.json created by --with-mcp\n' >&2
+  failures=$((failures + 1))
+fi
+if ! grep -Eq 'add -- .*📓 Journals/\.gitkeep' "$MOCK_GIT_CALLS"; then
+  printf 'FAIL: base commit did not stage the empty vault structure\n' >&2
+  failures=$((failures + 1))
+fi
+if ! grep -Fq 'commit -q -m chore: bootstrap ai-brain OpenCode vault' "$MOCK_GIT_CALLS"; then
+  printf 'FAIL: base commit was not created\n' >&2
   failures=$((failures + 1))
 fi
 

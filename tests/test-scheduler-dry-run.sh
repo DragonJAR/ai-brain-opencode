@@ -2,33 +2,14 @@
 set -euo pipefail
 
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ai-brain-schedule-test.XXXXXX")"
+# shellcheck source=tests/lib/mocks.sh
+. "$PKG/tests/lib/mocks.sh"
+TMP_ROOT="$(ai_brain_test_root schedule-test)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 mkdir -p "$TMP_ROOT/bin" "$TMP_ROOT/tmp" "$TMP_ROOT/vault/⚙️ Meta"
-cat > "$TMP_ROOT/bin/uname" <<'SH'
-#!/bin/sh
-printf '%s\n' Linux
-SH
-cat > "$TMP_ROOT/bin/crontab" <<'SH'
-#!/bin/sh
-printf '%s\n' "$*" >> "$MOCK_CRONTAB_CALLS"
-case "${1:-}" in
-  -l)
-    [ -f "$MOCK_CRONTAB_STATE" ] || exit 1
-    cat "$MOCK_CRONTAB_STATE"
-    ;;
-  *)
-    printf '%s\n' "$*" >> "$MOCK_CRONTAB_WRITES"
-    if [ "${1:-}" = "-" ]; then
-      cat > "$MOCK_CRONTAB_STATE"
-    elif [ -f "${1:-}" ]; then
-      cat "$1" > "$MOCK_CRONTAB_STATE"
-    fi
-    ;;
-esac
-SH
-chmod +x "$TMP_ROOT/bin/uname" "$TMP_ROOT/bin/crontab"
+ai_brain_mock_platform "$TMP_ROOT/bin"
+ai_brain_mock_crontab "$TMP_ROOT/bin"
 
 cat > "$TMP_ROOT/vault/⚙️ Meta/brain-config.json" <<'JSON'
 {
@@ -55,4 +36,22 @@ if [ -s "$MOCK_CRONTAB_WRITES" ]; then
   exit 1
 fi
 
-printf 'PASS: Linux --dry-run did not invoke a mutating crontab command\n'
+# A malformed schedule value must not produce an invalid cron line.
+cat > "$TMP_ROOT/vault/⚙️ Meta/brain-config.json" <<'JSON'
+{
+  "journal": {"time": "25:99"},
+  "schedule": {"insights_time": ["no", "es", "una", "hora"]}
+}
+JSON
+bash "$PKG/scripts/schedule.sh" "$TMP_ROOT/vault" --dry-run > "$TMP_ROOT/output-bad.txt" 2> "$TMP_ROOT/output-bad.err"
+if ! head -1 "$TMP_ROOT/output-bad.txt" | grep -q '^20 30 \* \* 1-5 '; then
+  printf 'FAIL: invalid journal.time did not fall back to 20:30: ' >&2
+  head -1 "$TMP_ROOT/output-bad.txt" >&2
+  exit 1
+fi
+if ! grep -q 'journal.time inválida' "$TMP_ROOT/output-bad.err"; then
+  printf 'FAIL: invalid journal.time did not emit a warning\n' >&2
+  exit 1
+fi
+
+printf 'PASS: Linux --dry-run is side-effect free and invalid times fall back safely\n'

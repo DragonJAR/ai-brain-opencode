@@ -69,6 +69,15 @@ assert "📝 Notes/Raw/fuente.md" in r["pending_raw"], r["pending_raw"]
 assert not any(p.startswith("📝 Notes/Raw/") for p in r["orphan_notes"]), r["orphan_notes"]
 PY
 
+# 4. The report is UTF-8 even when the console is not (Windows cp1252, LANG=C).
+for encoding in ascii cp1252; do
+  if ! PYTHONIOENCODING="$encoding" LC_ALL=C python3 "$PKG/scripts/audit.py" "$VAULT" > "$TMP_ROOT/enc.txt" 2>&1; then
+    fail "audit.py failed with a $encoding console"
+    cat "$TMP_ROOT/enc.txt" >&2
+  fi
+  grep -Fq '✓ Wikilinks' "$TMP_ROOT/enc.txt" || fail "audit.py did not print its UTF-8 symbols with a $encoding console"
+done
+
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: audit scope had %s failed assertions\n' "$failures" >&2
   exit 1

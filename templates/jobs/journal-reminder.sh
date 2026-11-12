@@ -24,8 +24,9 @@ APPLESCRIPT
     ;;
   Linux)
     # cron no hereda la sesión de escritorio: sin el bus del usuario notify-send no llega.
-    if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -S "/run/user/$(id -u)/bus" ]; then
-      DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+    BUS="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus"
+    if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -S "$BUS" ]; then
+      DBUS_SESSION_BUS_ADDRESS="unix:path=$BUS"
       export DBUS_SESSION_BUS_ADDRESS
     fi
     if command -v notify-send >/dev/null 2>&1; then

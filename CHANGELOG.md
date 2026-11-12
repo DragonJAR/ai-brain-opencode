@@ -19,6 +19,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   aviso; si no queda ninguna válida se usa la lista por defecto. `install.sh --config` muestra los mismos avisos.
 - **`uninstall.sh --dry-run`:** solo decía que los trabajos programados "se conservan". Ahora lista las entradas de
   cron, launch agents o tareas de Windows que se eliminarían, sin tocarlas (`schedule.sh --remove --dry-run`).
+- **Linux:** el recordatorio del diario busca el bus de sesión en `$XDG_RUNTIME_DIR` cuando está definido, antes de
+  `/run/user/<uid>`.
+
+### Añadido
+- `tests/run.sh` descubre también `tests/test-*.mjs`; regresiones para la salida UTF-8 de `/audit`, el bus de
+  `notify-send`, la limpieza de `AGENTS.md` y el aviso falso de symlink al reinstalar.
 
 ## [0.2.0] - 2026-11-11
 

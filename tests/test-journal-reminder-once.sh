@@ -90,4 +90,26 @@ if ! grep -q 'item 1 of argv' "$JOB" || ! grep -q 'osascript - "\$NAME"' "$JOB";
   exit 1
 fi
 
-printf 'PASS: journal-reminder reads config once; osascript gets name via argv\n'
+# Linux under cron: no DBUS_SESSION_BUS_ADDRESS, so the job points notify-send
+# at the user's session bus (cron leaves XDG_RUNTIME_DIR unset: /run/user/<uid>).
+# A short path: macOS limits unix socket paths to 104 bytes.
+BUS_DIR="$(mktemp -d /tmp/aib-bus.XXXXXX)"
+trap 'rm -rf "$TMP_ROOT" "$BUS_DIR"' EXIT
+"$REAL_PY" -c 'import socket, sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$BUS_DIR/bus"
+NOTIFY_LOG="$TMP_ROOT/notify-send.log"
+cat > "$TMP_ROOT/bin/notify-send" <<SH
+#!/bin/sh
+printf '%s\n' "\${DBUS_SESSION_BUS_ADDRESS:-unset}" >> "$NOTIFY_LOG"
+SH
+chmod +x "$TMP_ROOT/bin/notify-send"
+env -u DBUS_SESSION_BUS_ADDRESS MOCK_UNAME=Linux XDG_RUNTIME_DIR="$BUS_DIR" bash "$JOB" > "$TMP_ROOT/linux.txt" 2>&1 || true
+if [ "$(cat "$NOTIFY_LOG" 2>/dev/null)" != "unix:path=$BUS_DIR/bus" ]; then
+  printf 'FAIL: notify-send did not get the session bus address (got: %s)\n' "$(cat "$NOTIFY_LOG" 2>/dev/null || echo 'not called')" >&2
+  exit 1
+fi
+: > "$NOTIFY_LOG"
+DBUS_SESSION_BUS_ADDRESS="unix:path=/custom/bus" MOCK_UNAME=Linux XDG_RUNTIME_DIR="$BUS_DIR" bash "$JOB" > "$TMP_ROOT/linux.txt" 2>&1 || true
+[ "$(cat "$NOTIFY_LOG")" = "unix:path=/custom/bus" ] \
+  || { printf 'FAIL: journal-reminder overrode an existing DBUS_SESSION_BUS_ADDRESS\n' >&2; exit 1; }
+
+printf 'PASS: journal-reminder reads config once; osascript gets name via argv; notify-send gets the session bus\n'

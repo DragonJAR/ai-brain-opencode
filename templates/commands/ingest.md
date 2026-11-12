@@ -1,3 +1,7 @@
+---
+description: "Compila las fuentes de 📝 Notes/Raw/ en notas enlazadas sin tocar el original"
+---
+
 # /ingest — Ingesta y compilación de fuentes crudas (Karpathy LLM Wiki)
 
 Procesa documentos, transcripciones, lecturas o artículos depositados en `📝 Notes/Raw/` y los compila en conocimiento estructurado dentro del vault (`👤 CRM/`, `🚀 I+D/`, `💼 Business/`, `📝 Notes/`), tejiendo wikilinks bidireccionales y preservando la fuente original intacta.

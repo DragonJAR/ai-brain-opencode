@@ -1,3 +1,7 @@
+---
+description: "Audita la integridad del vault: enlaces rotos, notas huérfanas, frontmatter y fuentes crudas pendientes"
+---
+
 # /audit — Auditoría de Integridad Estructural del Vault
 
 Ejecuta el auditor determinista del vault (`scripts/audit.py`) para detectar y resolver inconsistencias: enlaces rotos, notas huérfanas, markdown sin frontmatter tipado y fuentes crudas pendientes.

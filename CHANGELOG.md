@@ -52,6 +52,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   podía guardar el informe, y pedía "/insights" en medio de una frase, que OpenCode v2 envía como texto y no como
   comando. Ahora usa `--auto` (y `--archived` si existe), invoca `--command insights` cuando la CLI lo ofrece y, si
   no, nombra la skill `insights`; sin `--auto` disponible el trabajo falla con un mensaje claro.
+- **`schedule.sh`:** fallaba con `CDPATH` exportado; en cron, una ruta del vault con `$`, comillas invertidas o
+  comillas se interpretaba (ahora va entre comillas simples y `%` escapado); el listado de `schtasks` en cp1252,
+  la página OEM o UTF-16 rompía la programación en Windows (ahora se decodifica). En macOS avisa si el vault está
+  en Documentos, Escritorio, Descargas o iCloud Drive (launchd no puede leerlos) y reintenta unas pocas veces el
+  `bootstrap` que choca con la descarga anterior del agente.
 - **`check-personal-data.sh`:** no veía correos dentro de archivos binarios, una lista de términos con CRLF no
   coincidía con nada y una línea vacía en ella marcaba todo el paquete. Además, cualquier línea con "humanizer"
   quedaba exenta; ahora solo se eximen las URL de los clones del vendor. Los `#` de la lista son comentarios.

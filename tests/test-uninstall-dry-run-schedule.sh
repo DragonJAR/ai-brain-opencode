@@ -53,7 +53,7 @@ cp "$VAULT/.opencode/brain-vault-install-manifest.json" "$TMP_ROOT/manifest-befo
 : > "$MOCK_CRONTAB_WRITES"
 bash "$PKG/uninstall.sh" "$VAULT" --dry-run > "$TMP_ROOT/uninstall-dry.txt" 2>&1 || fail "uninstall --dry-run failed"
 for job in $JOBS; do
-  grep -F '~ cron' "$TMP_ROOT/uninstall-dry.txt" | grep -Fq "/$job.sh\"" \
+  grep -F '~ cron' "$TMP_ROOT/uninstall-dry.txt" | grep -Fq "/$job.sh'" \
     || fail "uninstall --dry-run does not list the cron entry of $job"
 done
 [ ! -s "$MOCK_CRONTAB_WRITES" ] || fail "uninstall --dry-run wrote the crontab"

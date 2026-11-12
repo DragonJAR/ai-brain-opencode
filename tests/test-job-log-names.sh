@@ -52,7 +52,7 @@ done
 # 2. cron: each line appends its output to the same <job>.log.
 MOCK_UNAME=Linux bash "$PKG/scripts/schedule.sh" "$VAULT" --dry-run > "$TMP_ROOT/cron.txt"
 for job in $JOBS; do
-  grep -F "/$job.sh\"" "$TMP_ROOT/cron.txt" | grep -Fq ">> \"$LOGS/$job.log\" 2>&1" \
+  grep -F "/$job.sh'" "$TMP_ROOT/cron.txt" | grep -Fq ">> '$LOGS/$job.log' 2>&1" \
     || fail "cron line of $job does not log to $job.log"
 done
 

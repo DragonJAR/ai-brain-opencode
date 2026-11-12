@@ -6,6 +6,8 @@
 #   bash scripts/schedule.sh <ruta-del-vault> --remove --dry-run  lista lo que --remove eliminaría, sin tocar nada
 # Requisitos: macOS, Linux o Windows nativo (Git Bash, con cygpath).
 set -euo pipefail
+# common.sh también lo quita, pero la ruta del paquete se calcula antes de cargarlo.
+unset CDPATH
 
 VAULT="${1:-}"
 MODE="${2:-install}"
@@ -147,14 +149,21 @@ schedule_path() {
   printf '%s' "$out"
 }
 
-# Cron lee minuto y luego hora. `%` es salto de línea para cron: se escapa.
+# cron_quote <texto>: el texto literal para el sh de cron. Entre comillas simples
+# ($, ` y espacios no se interpretan) y con `%` escapado: cron lo vuelve salto de
+# línea y quita la barra de `\%` antes de pasar la línea a sh.
+cron_quote() {
+  printf "'%s'" "$(printf '%s' "$1" | sed -e "s/'/'\\\\''/g" -e 's/%/\\%/g')"
+}
+
+# Cron lee minuto y luego hora.
 write_cron_lines() {
-  local marker="$1" index=0 jobs_dir="${J//%/\\%}" log
+  local marker="$1" index=0
   while [ "$index" -lt "${#JOB_NAMES[@]}" ]; do
-    log="$(job_log_file "$VAULT" "${JOB_NAMES[$index]}")"
-    printf "%s %s * * %s PATH='%s' /bin/bash \"%s/%s.sh\" >> \"%s\" 2>&1 %s\n" \
+    printf "%s %s * * %s PATH='%s' /bin/bash %s >> %s 2>&1 %s\n" \
       "$(pm "${JOB_TIMES[$index]}")" "$(hm "${JOB_TIMES[$index]}")" "${JOB_DAYS[$index]}" \
-      "$SCHEDULE_PATH" "$jobs_dir" "${JOB_NAMES[$index]}" "${log//%/\\%}" "$marker"
+      "$SCHEDULE_PATH" "$(cron_quote "$J/${JOB_NAMES[$index]}.sh")" \
+      "$(cron_quote "$(job_log_file "$VAULT" "${JOB_NAMES[$index]}")")" "$marker"
     index=$((index + 1))
   done
 }
@@ -213,15 +222,43 @@ schtasks_native() {
 
 # Nombres de las tareas existentes, uno por línea.
 windows_task_names() {
-  local csv
-  csv="$(schtasks_native /Query /FO CSV /NH 2>/dev/null)" || return 1
-  # El CSV de schtasks es citado: los nombres de tarea pueden contener comas.
-  printf '%s\n' "$csv" | run_python -c 'import csv, io, sys
+  local csv rc=0
+  # A un archivo y no a $(...): la salida puede ser UTF-16 (bytes NUL).
+  csv="$(mktemp "${TMPDIR:-/tmp}/ai-brain-schtasks.XXXXXX")"
+  schtasks_native /Query /FO CSV /NH > "$csv" 2>/dev/null || { rm -f "$csv"; return 1; }
+  # El CSV de schtasks es citado: los nombres de tarea pueden contener comas. Su
+  # codificación depende de la consola (UTF-8, la página de códigos OEM o ANSI, o
+  # UTF-16): se prueba cada una sin reemplazar bytes en silencio.
+  run_python - "$csv" <<'PY' || rc=$?
+import codecs, csv, io, sys
+
+data = open(sys.argv[1], "rb").read()
+encodings = []
+if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+    encodings.append("utf-16")
+encodings.append("utf-8-sig")
+try:
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    for page in (kernel32.GetConsoleOutputCP(), kernel32.GetOEMCP(), kernel32.GetACP()):
+        if page:
+            encodings.append("cp%d" % page)
+except (AttributeError, OSError):
+    pass
+encodings += ["cp1252", "latin-1"]
+for encoding in encodings:
+    try:
+        text = data.decode(encoding)
+        break
+    except (LookupError, UnicodeDecodeError):
+        continue
 sys.stdout.reconfigure(encoding="utf-8", newline="\n")
-for row in csv.reader(io.StringIO(sys.stdin.read())):
+for row in csv.reader(io.StringIO(text)):
     if row and row[0].strip():
         print(row[0].strip().lstrip("\\"))
-'
+PY
+  rm -f "$csv"
+  return "$rc"
 }
 
 json_lines() {
@@ -506,8 +543,34 @@ PL
       return 1
     fi
     bootout_loaded "$label"
-    if launchctl bootstrap "gui/$(id -u)" "$plist"; then ok "$label"; else warn "$label (falló el bootstrap)"; return 1; fi
+    if bootstrap_agent "$plist" "$label"; then ok "$label"; else warn "$label (falló el bootstrap)"; return 1; fi
   }
+
+  # Justo después de un bootout, launchd puede seguir descargando el agente y
+  # bootstrap falla ("Input/output error", "already in progress"): unos pocos
+  # reintentos breves, no un bucle.
+  bootstrap_agent() {
+    local plist="$1" label="$2" attempt=1
+    while ! launchctl bootstrap "gui/$(id -u)" "$plist"; do
+      [ "$attempt" -lt 3 ] || return 1
+      attempt=$((attempt + 1))
+      sleep 1
+      bootout_loaded "$label"
+    done
+  }
+
+  # TCC: un launch agent no puede leer Documentos, Escritorio, Descargas ni iCloud
+  # Drive sin permiso explícito, y el trabajo fallaría en silencio cada noche.
+  tcc_folder=""
+  for home in "$HOME" "$(cd "$HOME" 2>/dev/null && pwd -P || printf '%s' "$HOME")"; do
+    for dir in Documents Desktop Downloads "Library/Mobile Documents"; do
+      case "$VAULT/" in "$home/$dir/"*) tcc_folder="$home/$dir" ;; esac
+    done
+  done
+  if [ -n "$tcc_folder" ]; then
+    warn "el vault está en una carpeta protegida de macOS ($tcc_folder): launchd no puede leerla y los trabajos fallarían."
+    warn "Mueve el vault fuera de Documentos, Escritorio, Descargas e iCloud Drive, o da Acceso total al disco a /bin/bash en Ajustes del Sistema > Privacidad y seguridad."
+  fi
 
   # Un agente propio cuyo trabajo ya no está en la tabla (renombrado o retirado)
   # se va: de lo contrario seguiría disparando un script que no existe.

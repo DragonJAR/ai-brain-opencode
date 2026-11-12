@@ -77,7 +77,7 @@ bash "$PKG/scripts/schedule.sh" "$VAULT" --dry-run > "$TMP_ROOT/cron.txt"
 MOCK_UNAME=MINGW64_NT-10.0 bash "$PKG/scripts/schedule.sh" "$VAULT" --dry-run > "$TMP_ROOT/schtasks.txt"
 for job in "$PKG"/templates/jobs/*.sh; do
   name="$(basename "$job" .sh)"
-  grep -Fq "/$name.sh\"" "$TMP_ROOT/cron.txt" || fail "cron does not schedule $name"
+  grep -Fq "/$name.sh'" "$TMP_ROOT/cron.txt" || fail "cron does not schedule $name"
   grep -Eq "ai-brain-run\.cmd\" $name\$" "$TMP_ROOT/schtasks.txt" || fail "schtasks does not schedule $name"
 done
 [ "$(wc -l < "$TMP_ROOT/cron.txt" | tr -d ' ')" = "$(find "$PKG/templates/jobs" -name '*.sh' | wc -l | tr -d ' ')" ] \

@@ -29,6 +29,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **`uninstall.sh` sin manifiesto válido:** decía "Listo" y salía con 0. Ahora sale con error antes de tocar la
   programación o los archivos y explica que no se eliminó nada. Sin `--purge-clones`, el `.gitignore` que oculta
   los clones del vendor se conserva mientras ellos sigan ahí.
+- **`--with-mcp` con JSONC:** un `opencode.json` con comentarios abortaba la instalación ya hecha, y junto a un
+  `opencode.jsonc` se creaba una segunda configuración. Ahora se avisa y se omite el paso MCP sin tocar el archivo.
 - **Linux:** el recordatorio del diario busca el bus de sesión en `$XDG_RUNTIME_DIR` cuando está definido, antes de
   `/run/user/<uid>`.
 

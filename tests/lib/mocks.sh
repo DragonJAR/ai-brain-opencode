@@ -107,6 +107,12 @@ esac
 exit 0
 SH
   chmod +x "$bin/schtasks"
+  cat > "$bin/taskkill" <<'SH'
+#!/bin/sh
+printf '%s\n' "$*" >> "${MOCK_TASKKILL_CALLS:-/dev/null}"
+exit 0
+SH
+  chmod +x "$bin/taskkill"
 }
 
 # plutil -lint that accepts every plist and keeps a copy in MOCK_PLUTIL_CAPTURE,

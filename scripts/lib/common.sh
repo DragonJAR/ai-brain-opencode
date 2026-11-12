@@ -59,7 +59,7 @@ copy_new_floors() {
 # job_init y cada backend del scheduler, así la rotación cubre toda la salida.
 job_log_file() { printf '%s/⚙️ Meta/logs/%s.log' "$1" "$2"; }
 
-# job_init: fija VAULT, LOG y PY3, rota el log y toma el candado. El nombre del
+# job_init: fija VAULT, LOG y PY3, toma el candado y rota el log. El nombre del
 # trabajo es el del script que lo llama (scripts/jobs/<trabajo>.sh). Un trabajo
 # que ya está corriendo no se solapa: el segundo sale con 0.
 JOB_LOG_MAX_BYTES=1048576
@@ -81,35 +81,117 @@ job_init() {
   CFG="$VAULT/⚙️ Meta/brain-config.json"
   mkdir -p "$VAULT/⚙️ Meta/logs"
   LOG="$(job_log_file "$VAULT" "$name")"
+  JOB_LOCK="$VAULT/⚙️ Meta/logs/.$name.lock"
+  if ! job_lock "$JOB_LOCK"; then
+    pid="$(cat "$JOB_LOCK/pid" 2>/dev/null || true)"
+    job_log "otra ejecución en curso (pid ${pid:-?}); omitido"
+    exit 0
+  fi
+  trap 'rm -rf "$JOB_LOCK"' EXIT
+  # Solo quien tiene el candado rota: otra ejecución puede estar escribiendo.
   if [ -f "$LOG" ]; then
     size="$(wc -c < "$LOG" | tr -d ' ')"
     if [ "${size:-0}" -gt "$JOB_LOG_MAX_BYTES" ]; then mv -f "$LOG" "${LOG%.log}.1.log"; fi
   fi
   require_python3 2>/dev/null || job_fail "sin Python 3 válido (python3, py -3, python)"
-  JOB_LOCK="$VAULT/⚙️ Meta/logs/.$name.lock"
-  if ! mkdir "$JOB_LOCK" 2>/dev/null; then
-    pid="$(cat "$JOB_LOCK/pid" 2>/dev/null || true)"
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      job_log "otra ejecución en curso (pid $pid); omitido"
-      exit 0
-    fi
-    rm -rf "$JOB_LOCK"
-    mkdir "$JOB_LOCK" || job_fail "no se pudo tomar el candado $JOB_LOCK"
-  fi
-  printf '%s\n' "$$" > "$JOB_LOCK/pid"
-  trap 'rm -rf "$JOB_LOCK"' EXIT
 }
 
-# run_with_timeout <segundos> <comando...>: sale con 124 si se agota el tiempo.
+# Un candado sin pid es de una ejecución que aún no lo escribió, salvo que sea
+# más viejo que esto (la ejecución murió entre mkdir y la escritura del pid).
+JOB_LOCK_STALE_MINUTES=10
+
+# job_lock_stale <candado>: 0 si su dueño ya no corre.
+job_lock_stale() {
+  local pid
+  pid="$(cat "$1/pid" 2>/dev/null || true)"
+  case "$pid" in
+    ''|*[!0-9]*) [ -n "$(find "$1" -maxdepth 0 -mmin +"$JOB_LOCK_STALE_MINUTES" 2>/dev/null)" ] ;;
+    *) ! kill -0 "$pid" 2>/dev/null ;;
+  esac
+}
+
+# job_lock <candado>: 0 si lo toma, 1 si otra ejecución viva lo tiene. mkdir es
+# atómico; quitar un candado viejo no lo es, así que solo quien tiene <candado>.reap
+# lo quita y vuelve a crearlo antes de soltarlo.
+job_lock() {
+  local lock="$1" reap="$1.reap" tries=0
+  while [ "$tries" -lt 20 ]; do
+    tries=$((tries + 1))
+    if mkdir "$lock" 2>/dev/null; then
+      job_lock_write_pid "$lock"
+      return 0
+    fi
+    [ -d "$lock" ] || continue
+    job_lock_stale "$lock" || return 1
+    if mkdir "$reap" 2>/dev/null; then
+      if job_lock_stale "$lock"; then rm -rf "$lock"; fi
+      if mkdir "$lock" 2>/dev/null; then
+        job_lock_write_pid "$lock"
+        rmdir "$reap"
+        return 0
+      fi
+      rmdir "$reap"
+      return 1
+    fi
+    if job_lock_stale "$reap"; then rm -rf "$reap"; else sleep 1; fi
+  done
+  return 1
+}
+
+job_lock_write_pid() {
+  printf '%s\n' "$$" > "$1/pid.$$" && mv -f "$1/pid.$$" "$1/pid"
+}
+
+# run_with_timeout <segundos> <comando...>: sale con 124 si se agota el tiempo y
+# mata todo el árbol del comando, no solo el hijo directo (opencode lanza su
+# propio servidor). POSIX: el hijo encabeza un grupo de procesos nuevo y se manda
+# TERM y luego KILL al grupo. Git Bash: `taskkill /T /F` sobre el PID de Windows.
 # Python y no `timeout`: no existe en macOS y en Windows es otro programa.
 run_with_timeout() {
-  local seconds="$1"
+  local seconds="$1" mode=group
   shift
-  run_python -c 'import shutil, subprocess, sys
-argv = sys.argv[2:]
+  if is_windows; then mode=tree; fi
+  run_python -c 'import os, shutil, signal, subprocess, sys
+mode, seconds, argv = sys.argv[1], float(sys.argv[2]), sys.argv[3:]
 argv[0] = shutil.which(argv[0]) or argv[0]
+child = subprocess.Popen(argv, start_new_session=(mode == "group"))
+
+def kill_tree():
+    if mode == "group":
+        for sig, grace in ((signal.SIGTERM, 5), (signal.SIGKILL, 0)):
+            try:
+                os.killpg(child.pid, sig)
+            except OSError:
+                break
+            try:
+                child.wait(timeout=grace)
+            except subprocess.TimeoutExpired:
+                pass
+        return
+    # An MSYS Python sees MSYS pids; taskkill needs the Windows one.
+    pid = child.pid
+    try:
+        with open("/proc/%d/winpid" % pid) as f:
+            pid = int(f.read())
+    except (OSError, ValueError):
+        pass
+    env = dict(os.environ, MSYS_NO_PATHCONV="1", MSYS2_ARG_CONV_EXCL="*")
+    try:
+        subprocess.call(["taskkill", "/T", "/F", "/PID", str(pid)], env=env,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
+    child.kill()
+
+def on_signal(signum, frame):
+    kill_tree()
+    raise SystemExit(128 + signum)
+
+signal.signal(signal.SIGTERM, on_signal)
 try:
-    raise SystemExit(subprocess.run(argv, timeout=float(sys.argv[1])).returncode)
+    raise SystemExit(child.wait(timeout=seconds))
 except subprocess.TimeoutExpired:
-    raise SystemExit(124)' "$seconds" "$@"
+    kill_tree()
+    child.wait()
+    raise SystemExit(124)' "$mode" "$seconds" "$@"
 }

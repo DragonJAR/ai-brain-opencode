@@ -71,7 +71,10 @@ def vault_target(value):
     return vault.joinpath(*rel.parts)
 
 def managed_file(value):
-    return (value in {".opencode/plugins/brain-vault/index.js", "scripts/verify.sh", "scripts/lib/ownership.py", "scripts/lib/python3.sh", "CLAUDE.md"}
+    path = relative(value)
+    return (value in {".opencode/plugins/brain-vault/index.js", "scripts/verify.sh", "scripts/audit.py", "scripts/lib/ownership.py", "scripts/lib/python3.sh", "CLAUDE.md", "⚙️ Meta/journal-config.md", ".gitignore"}
+            or (path.parts[:2] == (".opencode", "commands") and len(path.parts) == 3 and value.endswith(".md"))
+            or (path.parts[:2] == ("⚙️ Meta", "scripts") and len(path.parts) == 3)
             or (value.startswith("scripts/jobs/") and value.endswith((".sh", ".cmd"))))
 
 def managed_link(value):

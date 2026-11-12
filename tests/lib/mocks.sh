@@ -38,6 +38,12 @@ case "${1:-}" in
     [ -f "$MOCK_CRONTAB_STATE" ] || { printf 'no crontab for mock user\n' >&2; exit 1; }
     cat "$MOCK_CRONTAB_STATE"
     ;;
+  -r)
+    # `crontab -r` borra TODO el crontab del usuario: una regresión que lo llame
+    # debe fallar ruidosamente aquí, no pasar desapercibida.
+    printf 'FAIL: mock crontab received -r (user crontab would be destroyed)\n' >&2
+    exit 99
+    ;;
   -)
     printf '%s\n' "$*" >> "$MOCK_CRONTAB_WRITES"
     cat > "$MOCK_CRONTAB_STATE"
@@ -166,9 +172,12 @@ if [ "${1:-}" = -C ]; then
     log) printf 'deadbeef stub vendor\n'; exit 0 ;;
     init) mkdir -p "${MOCK_VAULT:-$repo}/.git"; exit 0 ;;
     symbolic-ref) exit 0 ;;
-    status) printf ' M .gitignore\n'; exit 0 ;;
+    status)
+      # MOCK_GIT_CLEAN=1 simula un árbol limpio (ejercita el camino "sin cambios").
+      [ "${MOCK_GIT_CLEAN:-0}" = 1 ] || printf ' M .gitignore\n'
+      exit 0 ;;
     add) exit 0 ;;
-    diff) exit 1 ;;
+    diff) [ "${MOCK_GIT_CLEAN:-0}" = 1 ] || exit 1; exit 0 ;;
     commit) exit 0 ;;
     var) reply_var ;;
   esac

@@ -11,7 +11,7 @@ mapea cada mecanismo, para saber qué está portado, qué se sustituyó y qué n
 | hooks en `~/.claude/settings.json` (stdin JSON, exit 2 bloquea) | plugins V2 en `.opencode/plugins/` (JS, hooks tipados) | **Portado** (`plugin/brain-vault/index.js`) |
 | UserPromptSubmit | `ctx.session.hook("prompt")` — muta el mensaje entrante | **Portado** |
 | SessionStart (contexto) | `ctx.session.hook("context")` — instrucciones de sistema por llamada | **Portado** |
-| PreToolUse (inspeccionar/mutar input) | `ctx.tool.hook("execute.before")` | **Portado** (auto-fix, no bloqueo) |
+| PreToolUse (inspeccionar/mutar input) | `ctx.tool.hook("execute.before")` | **Portado con alcance limitado**: solo herramientas de escritura, solo markdown dentro del vault, solo notas nuevas (auto-fix, no bloqueo) |
 | PostToolUse | `ctx.tool.hook("execute.after")` | Disponible, no usado |
 | PreCompact | `ctx.session.hook("compaction")` | Disponible, no usado |
 | Stop / SessionEnd | `ctx.event.subscribe(...)` | Parcial |
@@ -27,7 +27,7 @@ mapea cada mecanismo, para saber qué está portado, qué se sustituyó y qué n
 | detect-closing-signal.py | UserPromptSubmit | hook de prompt: señales de cierre EN/ES → inyecta el cascade de cierre |
 | inject-meeting-workflow-on-trigger.py | UserPromptSubmit | hook de prompt: trigger de reunión → flujo meeting-todos / cierre-de-llamada |
 | vault-context.py, session-start-context.py | SessionStart | hook de contexto: reglas del vault en cada llamada |
-| lint-vault-frontmatter.py | PreToolUse | hook de herramienta: auto-fix de frontmatter en notas nuevas |
+| lint-vault-frontmatter.py | PreToolUse | hook de herramienta: antepon frontmatter a notas NUEVAS de markdown dentro del vault (archivos existentes y separadores temáticos que no son frontmatter se respetan) |
 
 **Sustituidos por mecanismo nativo:**
 

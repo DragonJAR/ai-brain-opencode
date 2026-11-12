@@ -15,7 +15,7 @@ set -uo pipefail
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [ -n "${1:-}" ] && PKG="$1"
 BAD=0
-STRUCT_RE="/Users/[A-Za-z0-9._-]+|/(home|Users)/[a-z0-9._-]+/|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}"
+STRUCT_RE="/Users/[A-Za-z0-9._-]+|/(home|Users)/[A-Za-z0-9._-]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}"
 
 die() { printf '  ✗ %s\n' "$*" >&2; exit 1; }
 [ -d "$PKG" ] || die "no existe el directorio a revisar: $PKG"
@@ -104,7 +104,7 @@ fi
 
 echo "== Chequeo de nombres propios =="
 TERMS_FILE="${BRAIN_PERSONAL_TERMS:-$HOME/.config/ai-brain/personal-terms.txt}"
-if [ -f "$TERMS_FILE" ]; then
+if [ -s "$TERMS_FILE" ]; then
   # LICENSE se excluye: atribución del autor, no dato del operador.
   # odd/ y .atl/ no son archivos de producto.
   RAW="$(grep_in_pkg -rniE -f "$TERMS_FILE" . \

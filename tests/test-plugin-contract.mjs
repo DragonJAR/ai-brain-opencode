@@ -73,6 +73,14 @@ try {
   hooks.prompt[0](closing)
   ok(closing.prompt.text.includes("Señal de cierre detectada"), "la señal de cierre inyecta el cascade")
 
+  const closingPunct = { prompt: { text: "eso es todo por hoy." } }
+  hooks.prompt[0](closingPunct)
+  ok(closingPunct.prompt.text.includes("Señal de cierre detectada"), "el cierre con puntuación y sufijo largo se detecta")
+
+  const closingNfc = { prompt: { text: "adio\u0301s" } }
+  hooks.prompt[0](closingNfc)
+  ok(closingNfc.prompt.text.includes("Señal de cierre detectada"), "acentos NFD descompuestos se detectan tras normalizar")
+
   const meeting = { prompt: { text: "acabo de tener una reunión" } }
   hooks.prompt[0](meeting)
   ok(meeting.prompt.text.includes("Disparador de reunión detectado"), "el disparador de reunión inyecta el flujo")
@@ -81,12 +89,31 @@ try {
   hooks.prompt[0](plain)
   ok(plain.prompt.text === "arregla el bug del parser", "un prompt normal no se modifica")
 
+  // Falsos positivos clásicos: saludo o frase en mitad del mensaje no es cierre.
+  const greeting = { prompt: { text: "buenas noches, vamos a revisar el plan" } }
+  hooks.prompt[0](greeting)
+  ok(greeting.prompt.text === "buenas noches, vamos a revisar el plan", "un saludo inicial no dispara el cierre")
+
+  const midphrase = { prompt: { text: "me voy a explicarte el flujo completo" } }
+  hooks.prompt[0](midphrase)
+  ok(midphrase.prompt.text === "me voy a explicarte el flujo completo", "'me voy a...' en medio del mensaje no dispara el cierre")
+
+  const longText = "chao. " + "contexto largo ".repeat(80)
+  const longClose = { prompt: { text: longText } }
+  hooks.prompt[0](longClose)
+  ok(longClose.prompt.text === longText, "un mensaje largo no se trata como cierre")
+
+  const longMeeting = { prompt: { text: "acabo de tener una reunión " + "y además ".repeat(80) } }
+  hooks.prompt[0](longMeeting)
+  ok(longMeeting.prompt.text.includes("Disparador de reunión detectado"), "el disparador de reunión no tiene límite de largo")
+
   const cases = [
     ["📓 Journals/2026-11-10.md", "journal"],
     ["👤 CRM/ana.md", "person"],
     ["⚙️ Meta/Sessions/2026-11-10-0900.md", "session"],
     ["⚙️ Meta/Decisions/2026-11-10.md", "decision"],
     ["📝 Notes/idea.md", "note"],
+    ["📝 Notes/Raw/fuente.md", "raw"],
   ]
   const hook = hooks["execute.before"][0]
   for (const [rel, type] of cases) {
@@ -103,6 +130,16 @@ try {
   const existing = { tool: "write", input: { filePath: join(vault, "📝 Notes", "ya.md"), content: "---\ntype: note\n---\n# ya" } }
   await hook(existing)
   ok(existing.input.content === "---\ntype: note\n---\n# ya", "un archivo con frontmatter no se reescribe")
+
+  const thematic = { tool: "write", input: { filePath: join(vault, "📝 Notes", "regla.md"), content: "----\nun separador, no frontmatter" } }
+  await hook(thematic)
+  ok(thematic.input.content.startsWith("---\ntype: note"), "un separador temático que no es frontmatter sí recibe frontmatter")
+
+  const onDisk = join(vault, "📝 Notes", "vieja.md")
+  writeFileSync(onDisk, "# nota que ya existe", "utf8")
+  const overwrite = { tool: "write", input: { filePath: onDisk, content: "# reescritura sin frontmatter" } }
+  await hook(overwrite)
+  ok(overwrite.input.content === "# reescritura sin frontmatter", "sobrescribir un archivo existente no añade frontmatter")
 
   const notMarkdown = { tool: "write", input: { filePath: join(vault, "📝 Notes", "datos.json"), content: "{}" } }
   await hook(notMarkdown)
@@ -129,18 +166,30 @@ try {
   await brokenHooks["execute.before"][0](brokenWrite)
   ok(/created: \d{4}-\d{2}-\d{2}/.test(brokenWrite.input.content), "una zona horaria inválida cae a UTC sin romper el hook")
 
-  // 3. Unreadable config must fall back to defaults, not throw.
+  // 3. A directory without brain-config.json is not a vault of this package:
+  // the plugin must stay inactive instead of mutating foreign writes.
   const missing = makeVault("missing")
-  const missingHooks = await load(missing)
-  ok(missingHooks.context.length === 1 && missingHooks["execute.before"].length === 1, "sin brain-config.json el plugin sigue activo")
+  const warns = []
+  const originalWarn2 = console.warn
+  console.warn = (message) => warns.push(String(message))
+  let missingHooks
+  try {
+    missingHooks = await load(missing)
+  } finally {
+    console.warn = originalWarn2
+  }
+  ok(missingHooks.context.length === 0 && missingHooks.prompt.length === 0 && missingHooks["execute.before"].length === 0,
+     "sin brain-config.json el plugin no registra hooks")
+  ok(warns.some((w) => w.includes("no es un vault del paquete")), "la inactividad por falta de config se anuncia")
 
-  // 4. Missing hook API degrades gracefully.
+  // 4. Missing hook API degrades gracefully (on a real vault, with config).
+  const noHooksVault = makeVault("no-hooks", { language: "es" })
   const module = await import(pathToFileURL(join(PKG, "plugin", "brain-vault", "index.js")).href + "?v=no-hooks")
   let threw = false
   const originalWarn = console.warn
   console.warn = () => {}
   try {
-    await module.default.setup({ location: { directory: missing } })
+    await module.default.setup({ location: { directory: noHooksVault } })
   } catch {
     threw = true
   } finally {

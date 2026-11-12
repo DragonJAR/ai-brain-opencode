@@ -291,7 +291,7 @@ wire_tree() {
 
 echo "== 1. Carpetas canónicas del vault =="
 if [ "$WIRE" = 0 ]; then
-  for d in "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "💼 Business/Engagements" "🚀 I+D/Herramientas" "🚀 I+D/Investigación" \
+  for d in "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "📝 Notes/Raw" "💼 Business/Engagements" "🚀 I+D/Herramientas" "🚀 I+D/Investigación" \
            "⚙️ Meta/Folder Resolvers" "⚙️ Meta/scripts" "⚙️ Meta/Sessions" "⚙️ Meta/Decisions" "⚙️ Meta/Workflows" \
            "⚙️ Meta/Facts" "⚙️ Meta/Exceptions" "⚙️ Meta/Floors" "⚙️ Meta/logs" ".opencode/commands" ".opencode/plugins"; do
     if ! ensure_vault_dir "$d"; then
@@ -340,6 +340,7 @@ else
   echo "== 3. Cablear skills y comandos (symlinks relativos, sin copias) =="
 fi
 for d in "$R"/skills/*/; do
+  [ -d "$d" ] || continue
   n="$(basename "$d")"; [ "$n" = "ai-brain-starter" ] && continue
   l="$VAULT/.opencode/skills/$n"
   wire_tree "$d" "$l" ".opencode/skills/$n" "ai-brain-starter/skills/$n"
@@ -352,10 +353,18 @@ else
 fi
 mkdir -p "$VAULT/.opencode/commands"
 for f in "$R"/commands/*.md; do
+  [ -f "$f" ] || continue
   n="$(basename "$f")"; l="$VAULT/.opencode/commands/$n"
   wire_file "$f" "$l" ".opencode/commands/$n" "../skills/ai-brain-starter/commands/$n"
 done
 flush_links
+if [ -d "$PKG/templates/commands" ]; then
+  for f in "$PKG"/templates/commands/*.md; do
+    [ -f "$f" ] || continue
+    n="$(basename "$f")"
+    managed_copy "$f" "$VAULT/.opencode/commands/$n" ".opencode/commands/$n" 0644
+  done
+fi
 if [ "$WIRE_MODE" = "copy" ]; then
   ok "$(find "$VAULT/.opencode/commands" -maxdepth 1 -mindepth 1 -type f | wc -l | tr -d ' ') comandos copiados"
 else
@@ -398,7 +407,15 @@ if [ "$WIRE" = 0 ]; then
   if [ "$STARTER_CREATED" = 1 ]; then owner_manifest record-tree ".opencode/skills/ai-brain-starter" "$R" || warn "no se pudo registrar el clon del starter"; fi
   if [ "$HUMANIZER_CREATED" = 1 ]; then owner_manifest record-tree ".opencode/skills/humanizer" "$H" || warn "no se pudo registrar el clon de humanizer"; fi
   if [ -d "$R/floors" ]; then
-    cp -n "$R/floors/"*.md "$VAULT/⚙️ Meta/Floors/" 2>/dev/null && ok "$(ls -1 "$VAULT/⚙️ Meta/Floors" | wc -l | tr -d ' ') notas de piso"
+    floors_copied=0
+    shopt -s nullglob
+    for floor in "$R/floors/"*.md; do
+      dest="$VAULT/⚙️ Meta/Floors/${floor##*/}"
+      if [ -e "$dest" ]; then continue; fi
+      if cp "$floor" "$dest"; then floors_copied=$((floors_copied + 1)); else warn "no se pudo copiar ${floor##*/}"; fi
+    done
+    shopt -u nullglob
+    ok "$(find "$VAULT/⚙️ Meta/Floors" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ') notas de piso (${floors_copied} nuevas)"
   fi
 else
   ok "pisos y datos personales preservados (--wire)"
@@ -409,6 +426,8 @@ if [ "$WIRE" = 1 ]; then
   ok "journal-config.md preservado (--wire)"
 elif [ ! -f "$VAULT/⚙️ Meta/journal-config.md" ] && [ -f "$R/templates/journal-config.md" ]; then
   cp "$R/templates/journal-config.md" "$VAULT/⚙️ Meta/journal-config.md" && ok "journal-config.md creado"
+  owner_manifest record-file "⚙️ Meta/journal-config.md" "$VAULT/⚙️ Meta/journal-config.md" \
+    || warn "no se pudo registrar ⚙️ Meta/journal-config.md"
 else
   ok "journal-config.md presente"
 fi
@@ -560,6 +579,7 @@ for f in "$PKG"/templates/jobs/*.sh; do
   [ "$MANAGED_COPY_RESULT" = 1 ] && n_jobs=$((n_jobs+1))
 done
 managed_copy "$PKG/scripts/verify.sh" "$VAULT/scripts/verify.sh" "scripts/verify.sh" 0755
+managed_copy "$PKG/scripts/audit.py" "$VAULT/scripts/audit.py" "scripts/audit.py" 0755
 managed_copy "$PKG/scripts/lib/ownership.py" "$VAULT/scripts/lib/ownership.py" "scripts/lib/ownership.py" 0644
 managed_copy "$PKG/scripts/lib/python3.sh" "$VAULT/scripts/lib/python3.sh" "scripts/lib/python3.sh" 0644
 ok "$n_jobs trabajos gestionados"
@@ -588,6 +608,8 @@ else
 ⚙️ Meta/.probe-on
 GI
     ok ".gitignore"
+    owner_manifest record-file ".gitignore" "$VAULT/.gitignore" \
+      || warn "no se pudo registrar .gitignore"
   fi
 fi
 
@@ -601,7 +623,7 @@ import json, pathlib, sys
 p = pathlib.Path(sys.argv[1])
 if p.exists() and (p.is_symlink() or not p.is_file() or p.stat().st_nlink != 1):
     raise SystemExit("refusing to modify a symlinked, non-regular, or hard-linked opencode.json")
-d = json.loads(p.read_text()) if p.exists() else {"$schema": "https://opencode.ai/config.json"}
+d = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"$schema": "https://opencode.ai/config.json"}
 if not isinstance(d, dict):
     raise SystemExit("refusing to modify opencode.json with a non-object root")
 servers = d.setdefault("mcp", {}).setdefault("servers", {})

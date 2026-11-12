@@ -12,7 +12,7 @@ if [ -f "$PACKAGE_ROOT/install.sh" ] \
 fi
 
 VAULT="$PACKAGE_ROOT"
-cd "$VAULT"
+cd "$VAULT" || exit 1
 PY3="python3"
 if [ -f "$SCRIPT_DIR/lib/python3.sh" ]; then
   # shellcheck source=lib/python3.sh
@@ -112,10 +112,12 @@ echo "== Git y entorno =="
 [ -d .git ] && chk "repo git inicializado" 1 || chk "repo git inicializado" 0
 command -v opencode >/dev/null && chk "opencode CLI presente" 1 || chk "opencode CLI presente" 0
 command -v git >/dev/null && chk "git presente" 1 || chk "git presente" 0
-if [ "$WIN" = 1 ]; then
-  if [ -n "$PY3" ]; then chk "python presente ($PY3)" 1; else chk "python presente" 0; fi
+# PY3 puede ser "py -3": la expansión sin comillas es intencional (dos palabras).
+# shellcheck disable=SC2086
+if $PY3 -c 'import sys' 2>/dev/null; then
+  chk "python presente ($PY3)" 1
 else
-  command -v python3 >/dev/null && chk "python3 presente" 1 || chk "python3 presente" 0
+  chk "python presente ($PY3)" 0
 fi
 
 echo

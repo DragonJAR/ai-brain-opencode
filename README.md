@@ -34,7 +34,7 @@
 | [OpenCode](https://opencode.ai/docs) with a configured model | Runtime that loads the vault and plugin |
 | Git | Clone starter + humanizer; vault bootstrap commit |
 | Python 3.9+ (`python3`, `py -3` or `python` on `PATH`) | Installer, ownership and journal helpers (the installer validates the version) |
-| Node 18+ (optional) | If present, installer runs `node --check` on the plugin |
+| Node (optional) | Lets the installer syntax-check the plugin with `node --check`; the version is not validated |
 | macOS, Linux, WSL2 Ubuntu, or Windows native (Git Bash) | POSIX: symlinks + launchd/cron · Windows: file copies + **schtasks** |
 | Obsidian (optional) | Browse the vault; `--with-obsidian` installs five community plugins |
 
@@ -53,7 +53,7 @@ The vault path is **always explicit**. Does not automatically detect vaults or m
 | `--config <file>` | Seed `⚙️ Meta/brain-config.json` from a JSON file |
 | `--wire` | Re-link an existing vault after starter updates (no clone/scaffold; may combine with `--with-schedule`) |
 | `--with-mcp` | Add remote MCP servers `granola` + `chatprd` into vault `opencode.json` (sends conversation when used—opt-in) |
-| `--with-obsidian` | Install five Obsidian community plugins under `.obsidian/plugins/` |
+| `--with-obsidian` | Install five Obsidian community plugins under `.obsidian/plugins/` (macOS/Linux only) |
 | `--with-schedule` | Register scheduled jobs (launchd on macOS, cron on Linux, schtasks on Windows) |
 
 Also accepted: `--help` / `-h`, and `--yes` / `-y` (no prompts; installer is non-interactive).
@@ -82,7 +82,7 @@ The installer copies the plugin to `<vault>/.opencode/plugins/brain-vault/index.
 |---|---|
 | Context rules each turn | `brain-config.json` (`language`, `journal.time`, `timezone`, `habits`, `extra_rules`) |
 | Close-signal cascade | Prompt words like “chao” / “that’s all” (language-aware) |
-| Meeting trigger | Phrases like “just had a meeting” → meeting-todos guidance |
+| Meeting trigger | Phrases like “just had a meeting” → meeting-todos workflow |
 | Auto frontmatter on new markdown | Folder-based `type:` + `created:` before writes |
 
 ## Slash commands
@@ -99,22 +99,27 @@ OpenCode session opened on the vault; each forwards to its skill, which the inst
 | `/insights` | Weekly or monthly journal insights: pattern recognition and panel feedback |
 | `/meeting-todos` | Extract action items from a meeting note and route them to the right to-do file |
 | `/cierre` | A sales call just ended: full follow-up — CRM, tasks, email draft, reminder, coaching |
+| `/today` | Executive daily briefing cross-referencing journal, active sessions, engagements and CRM |
 | **Vault & knowledge** | |
 | `/diagnose` | Self-check of the install (instructions file, Meta folders, skills, hooks, MCPs) |
 | `/setup-vault-types` | Configure which document types your vault uses and scaffold extractors |
 | `/second-brain-mapping` | Map the vault: structured metadata per typed file, cross-doc insights, optional graph |
 | `/graphify` | Turn the vault into a clustered knowledge graph with HTML and JSON outputs |
 | `/optimize-brain` | Deep vault optimization: CRM, graphs, dashboards, compression, wikilinks |
+| `/ingest` | Ingest raw sources from `📝 Notes/Raw/` into compiled knowledge notes with wikilinks |
+| `/audit` | Deterministic vault audit: broken wikilinks, orphan notes, untyped markdown, pending raw |
 | **Patterns & ideas** | |
 | `/patterns` | Scan recent sessions for recurring patterns and turn them into captures (rules, concept notes, writing seeds) |
 | `/deconstruct` | First-principles analyst: surface hidden assumptions, find foundational truths, rebuild |
 | `/evolve` | Cluster hardened instincts into a proposed command / skill / agent (Instinct Engine) |
 | `/instinct-export` | Export the instinct library to a portable YAML pack (Instinct Engine) |
 | `/instinct-import` | Import a portable YAML instinct pack with confidence-gated merge (Instinct Engine) |
+| `/ideas` | Cross-domain pattern discovery across Business, I+D, and Notes |
 | **Content** | |
 | `/humanizer` | Strip AI-isms from external prose and rewrite in your actual voice |
 | `/repurpose-talk` | Turn a speaking engagement into 10–30 pieces of content |
 | `/nano-banana` | Generate or edit images using Google's Gemini Image model |
+| `/create` | Humanized content drafting from vault context in authentic voice (zero AI clichés) |
 
 ## Configuration
 
@@ -154,6 +159,9 @@ Defaults from `templates/brain-config.example.json` and `scripts/schedule.sh`:
 | `insights-weekly.sh` | `21:00` | Sunday |
 | `daily-maintenance.sh` | `03:30` | Every day |
 | `update-brain.sh` | `08:00` | Monday |
+
+Times fire in the **host system timezone**; `timezone` in `brain-config.json` governs the dates the
+plugin renders, not the scheduler clock.
 
 ```bash
 bash scripts/schedule.sh ~/path/to/my-brain --dry-run   # show jobs; no launchd/cron writes
@@ -204,9 +212,10 @@ Removes only **unchanged owned** artifacts from the install manifest. Modified f
 ai-brain-opencode/
 ├── install.sh · uninstall.sh
 ├── plugin/brain-vault/index.js
-├── scripts/{schedule,verify,check-personal-data}.sh
+├── scripts/{schedule,verify,check-personal-data}.sh · scripts/audit.py
 ├── scripts/lib/ownership.py
 ├── templates/brain-config.example.json
+├── templates/commands/*.md
 ├── templates/jobs/*.sh
 ├── tests/run.sh
 └── docs/COMPAT.md

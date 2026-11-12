@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Actualiza el starter y humanizer (ff-only) y regenera los pisos.
 set -euo pipefail
-VAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+VAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 cd "$VAULT"
 mkdir -p "$VAULT/⚙️ Meta/logs"
 LOG="$VAULT/⚙️ Meta/logs/update.log"
@@ -39,15 +39,25 @@ if [ -f "$R/scripts/generate_floor_stubs.py" ]; then
     shopt -s nullglob
     floor_files=("$R/floors/"*.md)
     shopt -u nullglob
-    if [ ${#floor_files[@]} -gt 0 ]; then
-      if ! cp -n "${floor_files[@]}" "$VAULT/⚙️ Meta/Floors/" >> "$LOG" 2>&1; then
-        echo "$(date '+%F %T') falló copia de notas de piso" >> "$LOG"
-        echo "falló copia de notas de piso" >&2
+    # Copia explícita solo de los nuevos: el estado de salida de cp -n no es
+    # portable entre versiones de coreutils y las notas del usuario se preservan.
+    copied=0
+    preserved=0
+    for floor in "${floor_files[@]}"; do
+      dest="$VAULT/⚙️ Meta/Floors/${floor##*/}"
+      if [ -e "$dest" ]; then
+        preserved=$((preserved + 1))
+        continue
+      fi
+      if cp "$floor" "$dest" >> "$LOG" 2>&1; then
+        copied=$((copied + 1))
+      else
+        echo "$(date '+%F %T') falló copia de ${floor##*/}" >> "$LOG"
+        echo "falló copia de ${floor##*/}" >&2
         exit 1
       fi
-    else
-      echo "$(date '+%F %T') sin notas de piso en starter; omitida copia" >> "$LOG"
-    fi
+    done
+    echo "$(date '+%F %T') pisos: ${copied} nuevos, ${preserved} preservados" >> "$LOG"
   else
     echo "$(date '+%F %T') directorio floors ausente en starter; omitida copia" >> "$LOG"
   fi

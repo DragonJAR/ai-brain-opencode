@@ -14,7 +14,7 @@ fi
 [ -n "$VAULT" ] || { echo "uso: $0 <ruta-del-vault> [--dry-run|--remove|--help]" >&2; exit 1; }
 [ -d "$VAULT" ] || { echo "  ✗ el vault no existe: $VAULT" >&2; exit 1; }
 case "$MODE" in install|--dry-run|--remove) ;; *) echo "  ✗ modo desconocido: $MODE" >&2; exit 2 ;; esac
-VAULT="$(cd "$VAULT" && pwd)"
+VAULT="$(cd "$VAULT" && pwd -P)"
 OS="$(uname -s)"
 SLUG="$(basename "$VAULT" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//')"
 SLUG="${SLUG:-cerebro}"
@@ -231,9 +231,9 @@ write_windows_runner() {
     > "$dest"
 }
 
-# Nombres de tareas propias: se registran en el manifiesto (cron_lines) para que
-# --remove borre solo lo verificado, con la misma garantía que en POSIX.
-TASK_JSON=""
+# Tareas propias: los nombres se registran en el manifiesto (cron_lines) ANTES
+# de crearlas, para que --remove borre solo lo verificado con la misma garantía
+# que en POSIX.
 TASK_FAILED=0
 
 windows_task() {
@@ -256,7 +256,6 @@ windows_task() {
   fi
   if [ "$created" = 1 ]; then
     ok "$tn"
-    TASK_JSON="${TASK_JSON:+$TASK_JSON, }\"$tn\""
   else
     warn "no se pudo crear la tarea $tn"
     TASK_FAILED=1
@@ -273,22 +272,22 @@ windows_schedule() {
     owner_manifest init || die "manifiesto de propiedad inválido; no se cambió la programación"
     owner_manifest record-file "scripts/jobs/ai-brain-run.cmd" "$runner" \
       || warn "no se pudo registrar scripts/jobs/ai-brain-run.cmd"
+    # Los nombres son deterministas: se registran ANTES de crear para que una
+    # falla a medias nunca deje tareas instaladas sin dueño.
+    owner_manifest set-cron "[\"ai-brain ${SLUG} journal-reminder\", \"ai-brain ${SLUG} insights-weekly\", \"ai-brain ${SLUG} daily-maintenance\", \"ai-brain ${SLUG} update-brain\"]" \
+      || die "no se pudo registrar la propiedad de las tareas; bórralas a mano con schtasks /Delete"
   fi
   windows_task journal-reminder WEEKLY "MON,TUE,WED,THU,FRI" "$(sch_st "$JT")"
   windows_task insights-weekly WEEKLY "SUN" "$(sch_st "$ITIME")"
   windows_task daily-maintenance DAILY "" "$(sch_st "$MTIME")"
   windows_task update-brain WEEKLY "MON" "$(sch_st "$UTIME")"
-  if [ "$MODE" != "--dry-run" ]; then
-    if [ -n "$TASK_JSON" ]; then
-      owner_manifest set-cron "[$TASK_JSON]" \
-        || die "no se pudo registrar la propiedad de las tareas; bórralas a mano con schtasks /Delete"
-    fi
-    [ "$TASK_FAILED" = 0 ] || die "no se pudieron crear todas las tareas de Windows; revisa el output de schtasks"
+  if [ "$MODE" != "--dry-run" ] && [ "$TASK_FAILED" != 0 ]; then
+    die "no se pudieron crear todas las tareas de Windows; revisa el output de schtasks"
   fi
 }
 
 windows_schtasks_remove() {
-  local owned_json="$1" csv name bare line names owned removed
+  local owned_json="$1" csv name bare names owned removed
   command -v schtasks >/dev/null 2>&1 || die "falta schtasks"
   csv="$(schtasks /Query /FO CSV /NH 2>/dev/null)" || die "no se pudo listar las tareas programadas"
   names="$(mktemp "${TMPDIR:-/tmp}/ai-brain-schtasks-names.XXXXXX")"
@@ -296,18 +295,13 @@ windows_schtasks_remove() {
   printf '%s\n' "$owned_json" | $PY3 -c 'import json, sys
 for name in json.load(sys.stdin):
     print(name)' > "$owned"
+  # El CSV de schtasks es citado: los nombres de tarea pueden contener comas.
+  printf '%s\n' "$csv" | $PY3 -c 'import csv, io, sys
+for row in csv.reader(io.StringIO(sys.stdin.read())):
+    if row and row[0].strip():
+        print(row[0].strip().lstrip("\\"))
+' > "$names"
   removed=0
-  while IFS= read -r line || [ -n "$line" ]; do
-    line="${line%$'\r'}"
-    [ -n "$line" ] || continue
-    bare="${line%%,*}"
-    bare="${bare#\"}"
-    bare="${bare%\"}"
-    bare="${bare#\\}"
-    [ -n "$bare" ] && printf '%s\n' "$bare" >> "$names"
-  done <<EOF
-$csv
-EOF
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     grep -qxF "$name" "$names" || continue
@@ -445,7 +439,11 @@ PL
       rm -f "$plist"
       return 0
     fi
-    owner_manifest record-agent "$plist" "$label" || { warn "no se pudo registrar el launch agent: $plist"; return 0; }
+    if ! owner_manifest record-agent "$plist" "$label"; then
+      rm -f "$plist"   # sin registro no hay dueño: mejor no dejar el huérfano
+      warn "no se pudo registrar el launch agent: $plist"
+      return 0
+    fi
     bootout_loaded "$label"
     launchctl bootstrap "gui/$(id -u)" "$plist" && ok "$label" || echo "  ! $label (falló el bootstrap)"
   }
@@ -467,11 +465,14 @@ else
   read_crontab "$CURRENT" || { warn "no se pudo leer el crontab; no se cambió la programación"; exit 1; }
   PREVIOUS="$(owner_manifest cron-json)"
   OWNED="$(reconcile_crontab "$CURRENT" "$GENERATED" "$UPDATED" "$PREVIOUS")"
+  # La propiedad se registra ANTES de aplicar: si el registro fallara después,
+  # las líneas nuevas quedarían instaladas pero sin dueño (--remove no las vería).
+  owner_manifest set-cron "$OWNED" \
+    || { warn "no se pudo registrar la propiedad de las líneas; no se cambió el crontab"; exit 1; }
   if ! cmp -s "$CURRENT" "$UPDATED"; then
     crontab "$UPDATED"
     ok "4 entradas de cron propias ($MARK)"
   else
     ok "las entradas de cron propias ya están al día"
   fi
-  owner_manifest set-cron "$OWNED"
 fi

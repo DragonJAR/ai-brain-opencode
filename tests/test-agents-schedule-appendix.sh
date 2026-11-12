@@ -54,8 +54,12 @@ UT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="ut
 SEED_TZ="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["timezone"])' "$VAULT/⚙️ Meta/brain-config.json")"
 
 missing=0
-if ! grep -Fq "Recordatorio del diario: $JT ($SEED_TZ)" "$AGENTS"; then
-  printf 'FAIL: AGENTS.md diario time != example (%s) with seeded tz (%s)\n' "$JT" "$SEED_TZ" >&2
+if ! grep -Fq "Recordatorio del diario: $JT" "$AGENTS"; then
+  printf 'FAIL: AGENTS.md diario time != example (%s)\n' "$JT" >&2
+  missing=1
+fi
+if ! grep -Fq "zona horaria declarada: $SEED_TZ" "$AGENTS"; then
+  printf 'FAIL: AGENTS.md scheduler tz != seeded (%s)\n' "$SEED_TZ" >&2
   missing=1
 fi
 if ! grep -Fq "domingo $IT" "$AGENTS"; then

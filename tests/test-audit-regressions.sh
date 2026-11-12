@@ -203,19 +203,41 @@ printf '{"snapshot_paths": "not-a-list", "journal": {"time": "99:99"}}\n' > "$GI
 bash "$GIT_VAULT/scripts/jobs/daily-maintenance.sh" > "$TMP_ROOT/maint-bad.txt" 2>&1 || fail "daily-maintenance failed on a malformed config"
 
 # 13. update-brain exits 0 on every run (it failed from the second one on, when
-#     `cp -n` skipped the floors that already existed) and respects a pinned clone.
+#     `cp -n` skipped the floors that already existed), and third-party content
+#     only moves to the commit the installed package pins: the job never pulls.
+VENDOR_ORIGIN="$TMP_ROOT/vendor-origin"
+mkdir -p "$VENDOR_ORIGIN/floors" "$VENDOR_ORIGIN/scripts"
+printf '# floor\n' > "$VENDOR_ORIGIN/floors/one.md"
+printf 'pass\n' > "$VENDOR_ORIGIN/scripts/generate_floor_stubs.py"
+real_git -C "$VENDOR_ORIGIN" init -q
+real_git -C "$VENDOR_ORIGIN" config uploadpack.allowAnySHA1InWant true
+real_git -C "$VENDOR_ORIGIN" add .
+real_git -C "$VENDOR_ORIGIN" commit -q -m pinned
+PINNED="$(real_git -C "$VENDOR_ORIGIN" rev-parse HEAD)"
+printf '# newer floor\n' > "$VENDOR_ORIGIN/floors/two.md"
+real_git -C "$VENDOR_ORIGIN" add .
+real_git -C "$VENDOR_ORIGIN" commit -q -m newer
 UPD_STARTER="$GIT_VAULT/.opencode/skills/ai-brain-starter"
-mkdir -p "$UPD_STARTER/floors" "$UPD_STARTER/scripts"
-printf '# floor\n' > "$UPD_STARTER/floors/one.md"
-printf 'pass\n' > "$UPD_STARTER/scripts/generate_floor_stubs.py"
-real_git -C "$UPD_STARTER" init -q
-real_git -C "$UPD_STARTER" add .
-real_git -C "$UPD_STARTER" commit -q -m vendor
-real_git -C "$UPD_STARTER" checkout -q --detach
+real_git clone -q "$VENDOR_ORIGIN" "$UPD_STARTER"
+# The vault-side lock is the installed package's: point it at the fixture.
+python3 - "$GIT_VAULT/scripts/lib/vault_layout.py" "$VENDOR_ORIGIN" "$PINNED" <<'PY'
+import pathlib, re, sys
+path, origin, commit = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+text = path.read_text(encoding="utf-8")
+text, count = re.subn(r'\(".opencode/skills/ai-brain-starter", "[^"]+",\s*"[0-9a-f]+"\)',
+                      '(".opencode/skills/ai-brain-starter", %r, %r)' % (origin, commit), text)
+assert count == 1, "could not point the fixture lock at the local origin"
+path.write_text(text, encoding="utf-8")
+PY
 for run in 1 2; do
   bash "$GIT_VAULT/scripts/jobs/update-brain.sh" > "$TMP_ROOT/update-$run.txt" 2>&1 || fail "update-brain run $run exited non-zero"
 done
-grep -Fq 'HEAD suelto' "$GIT_VAULT/⚙️ Meta/logs/update-brain.log" || fail "update-brain tried to pull a clone pinned to a commit"
+[ "$(real_git -C "$UPD_STARTER" rev-parse HEAD)" = "$PINNED" ] \
+  || fail "update-brain left the vendor clone off the commit the package pins"
+[ ! -e "$UPD_STARTER/floors/two.md" ] || fail "update-brain pulled vendor content newer than the pinned commit"
+if grep -Eq 'git .*(pull|merge)' "$PKG/templates/jobs/update-brain.sh"; then
+  fail "update-brain.sh pulls third-party repositories on its own"
+fi
 
 # 14. --purge-clones still works after the clone moved on: a clone is owned by
 #     its origin, not by a fingerprint that the first pull invalidates.

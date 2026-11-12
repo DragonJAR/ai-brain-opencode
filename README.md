@@ -127,7 +127,7 @@ With `--with-schedule` (launchd on macOS, cron on Linux, schtasks on Windows). E
 | `journal-reminder` | 20:30, Mon–Fri | Desktop notification |
 | `insights-weekly` | 21:00, Sunday | Runs the weekly insights headless |
 | `daily-maintenance` | 03:30, daily | Journal index and a git snapshot of `snapshot_paths` |
-| `update-brain` | 08:00, Monday | Refreshes the starter skills and humanizer |
+| `update-brain` | 08:00, Monday | Keeps the starter skills and humanizer at the versions this package pins, and re-wires |
 
 Preview or remove them with `bash scripts/schedule.sh <vault> --dry-run` / `--remove`.
 
@@ -141,8 +141,9 @@ The package updates **only** from `https://github.com/DragonJAR/ai-brain-opencod
 `git pull --ff-only` on this checkout and re-wires the vault. It refuses, and changes nothing, if `origin` is any
 other repository, the checkout has local changes, or the pull is not a fast-forward.
 
-The starter skills and humanizer are third-party content, not the tool: the `update-brain` job refreshes them from
-their own repositories. It never touches the package.
+Nothing else updates on its own. The starter skills and humanizer are third-party content pinned to a commit in
+`scripts/lib/vault_layout.py`: the installer and the `update-brain` job check that commit out and never pull, so a
+newer version of them reaches your vault only through an update of this package.
 
 ## Uninstall
 

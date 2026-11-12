@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Actualiza el starter y humanizer (ff-only), regenera los pisos y re-cablea.
-# No actualiza el paquete ai-brain-opencode: eso lo hace a mano `bash install.sh --update <vault>`
-# desde su checkout, y solo desde el repositorio oficial.
+# Deja el starter y humanizer en los commits que fija el paquete instalado,
+# regenera los pisos y re-cablea. No descarga versiones nuevas por su cuenta:
+# el paquete y los commits del vendor solo cambian con
+# `bash install.sh --update <vault>`, desde el repositorio oficial del paquete.
 set -euo pipefail
 LIB="$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 [ -f "$LIB" ] || { echo "falta scripts/lib/common.sh; re-ejecuta install.sh sobre este vault" >&2; exit 1; }
@@ -9,21 +10,19 @@ LIB="$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 . "$LIB"
 job_init
 R="$VAULT/.opencode/skills/ai-brain-starter"
-H="$VAULT/.opencode/skills/humanizer"
 
-# Un clon fijado a un SHA (BRAIN_STARTER_PIN) queda con HEAD suelto: se respeta.
-pull_clone() {
-  local name="$1" path="$2"
-  if [ ! -d "$path/.git" ]; then
-    job_log "$name no es repo git; omitido pull"
-  elif ! git -C "$path" symbolic-ref -q HEAD >/dev/null 2>&1; then
-    job_log "$name fijado a un commit (HEAD suelto); omitido pull"
-  else
-    git -C "$path" pull --ff-only >> "$LOG" 2>&1 || job_log "pull $name falló"
-  fi
-}
-pull_clone starter "$R"
-pull_clone humanizer "$H"
+while IFS=$'\t' read -r rel url commit; do
+  [ -n "$rel" ] || continue
+  rc=0
+  sync_vendor_clone "$VAULT/$rel" "$url" "$commit" || rc=$?
+  case "$rc" in
+    0) job_log "$rel en el commit fijado por el paquete (${commit:0:8})" ;;
+    3) job_log "$rel no es un clon de $url; no se toca" ;;
+    *) job_log "$rel: no se pudo activar el commit fijado ${commit:0:8} (¿sin red o con cambios locales?)" ;;
+  esac
+done <<EOF
+$(vendor_lock)
+EOF
 
 if [ -f "$R/scripts/generate_floor_stubs.py" ]; then
   run_python "$R/scripts/generate_floor_stubs.py" >> "$LOG" 2>&1 || job_fail "falló generate_floor_stubs"

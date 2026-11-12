@@ -25,8 +25,6 @@ unset CDPATH
 
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_REPO="https://github.com/DragonJAR/ai-brain-opencode"
-STARTER_REPO="https://github.com/mycelium-hq/ai-brain-starter"
-HUMANIZER_REPO="https://github.com/adelaidasofia/humanizer.git"
 LIB="$PKG/scripts/lib"
 OS="$(uname -s)"
 VAULT="" CONFIG="" WIRE=0 WITH_MCP=0 WITH_OBSIDIAN=0 WITH_SCHEDULE=0 DRY_RUN=0 UPDATE=0
@@ -129,6 +127,30 @@ case "$OS" in
   *) die "plataforma no soportada ($OS): se requiere macOS, Linux o Windows nativo (Git Bash). No se modificó el vault" ;;
 esac
 pick_python3 || die "falta Python >= 3.9 (python3, py -3 o python). No se modificó el vault"
+# Repositorio y commit de cada clon del vendor: una sola lista, vault_layout.py.
+VENDOR_LOCK="$(vendor_lock)" || die "paquete incompleto: scripts/lib/vault_layout.py no lista los clones del vendor"
+STARTER_REPO="" STARTER_COMMIT="" HUMANIZER_REPO="" HUMANIZER_COMMIT=""
+while IFS=$'\t' read -r vendor_rel vendor_url vendor_commit; do
+  case "$vendor_rel" in
+    .opencode/skills/ai-brain-starter) STARTER_REPO="$vendor_url"; STARTER_COMMIT="${BRAIN_STARTER_PIN:-$vendor_commit}" ;;
+    .opencode/skills/humanizer) HUMANIZER_REPO="$vendor_url"; HUMANIZER_COMMIT="$vendor_commit" ;;
+  esac
+done <<EOF
+$VENDOR_LOCK
+EOF
+[ -n "$STARTER_REPO" ] && [ -n "$STARTER_COMMIT" ] && [ -n "$HUMANIZER_REPO" ] && [ -n "$HUMANIZER_COMMIT" ] \
+  || die "paquete incompleto: scripts/lib/vault_layout.py no lista los clones del vendor"
+
+# pin_vendor <nombre> <ruta> <repositorio> <commit>: deja el clon en el commit fijado.
+pin_vendor() {
+  local rc=0
+  sync_vendor_clone "$2" "$3" "$4" || rc=$?
+  case "$rc" in
+    0) ok "$1 en el commit fijado por el paquete (${4:0:8})" ;;
+    3) warn "$1: $2 no es un clon de $3; se usa tal como está, sin fijar la versión" ;;
+    *) return 1 ;;
+  esac
+}
 if [ "$OS" = "Linux" ] && { [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; }; then
   warn "WSL2 detectado: cron no arranca solo; actívalo con 'sudo service cron start' para que --with-schedule funcione"
 fi
@@ -288,26 +310,18 @@ else
 fi
 
 echo "== 2. Clonar/actualizar ai-brain-starter (fuente única) =="
-if [ "$WIRE" = 1 ]; then
+if [ "$WIRE" = 1 ] && [ "$UPDATE" = 0 ]; then
   ok "starter existente; --wire no clona ni actualiza"
-elif [ -f "$R/.git/HEAD" ]; then
-  if [ "${BRAIN_STARTER_UPDATE:-}" = "1" ]; then
-    if git -C "$R" pull --ff-only >/dev/null 2>&1; then ok "starter actualizado (ff-only)"; else warn "pull falló: se usa la versión local"; fi
-  else
-    ok "starter presente (actualiza con BRAIN_STARTER_UPDATE=1)"
-  fi
 else
-  git clone -q --depth 1 "$STARTER_REPO" "$R" || die "no se pudo clonar $STARTER_REPO"
-  owner_manifest record-clone ".opencode/skills/ai-brain-starter" "$STARTER_REPO" || die "no se pudo registrar el clon del starter"
-  if [ -n "${BRAIN_STARTER_PIN:-}" ]; then
-    if git -C "$R" fetch -q --depth 1 origin "$BRAIN_STARTER_PIN" 2>/dev/null \
-       && git -C "$R" checkout -q "$BRAIN_STARTER_PIN" 2>/dev/null; then
-      ok "starter en el SHA fijado ($BRAIN_STARTER_PIN)"
-    else
-      die "no se pudo fijar BRAIN_STARTER_PIN=$BRAIN_STARTER_PIN (SHA inexistente o red); borra $R y reintenta"
-    fi
+  if [ ! -f "$R/.git/HEAD" ]; then
+    [ "$WIRE" = 0 ] || die "--update requiere un starter existente en $R"
+    git clone -q --depth 1 "$STARTER_REPO" "$R" || die "no se pudo clonar $STARTER_REPO"
+    owner_manifest record-clone ".opencode/skills/ai-brain-starter" "$STARTER_REPO" || die "no se pudo registrar el clon del starter"
+    pin_vendor starter "$R" "$STARTER_REPO" "$STARTER_COMMIT" \
+      || die "no se pudo activar el commit $STARTER_COMMIT del starter (¿sin red o commit inexistente?); borra $R y reintenta"
   else
-    ok "starter clonado ($(git -C "$R" log --oneline -1 | cut -c1-8))"
+    pin_vendor starter "$R" "$STARTER_REPO" "$STARTER_COMMIT" \
+      || warn "no se pudo activar el commit ${STARTER_COMMIT:0:8} del starter (¿sin red o con cambios locales?); se usa la versión presente"
   fi
 fi
 [ -f "$R/SKILL.md" ] || die "el clon no tiene SKILL.md — revisa $R"
@@ -333,17 +347,20 @@ wire_vendor scripts
 
 echo "== 4. humanizer (MIT, lo usa la regla de humanización) =="
 H="$VAULT/.opencode/skills/humanizer"
-if [ "$WIRE" = 1 ]; then
+if [ "$WIRE" = 1 ] && [ "$UPDATE" = 0 ]; then
   ok "humanizer preservado (--wire no instala dependencias)"
-elif [ ! -e "$H" ] && [ ! -L "$H" ]; then
-  if git clone -q --depth 1 "$HUMANIZER_REPO" "$H"; then
-    owner_manifest record-clone ".opencode/skills/humanizer" "$HUMANIZER_REPO" || warn "no se pudo registrar el clon de humanizer"
-    ok "humanizer clonado"
-  else
-    warn "humanizer falló (opcional)"
-  fi
 else
-  ok "humanizer presente"
+  if [ ! -e "$H" ] && [ ! -L "$H" ] && [ "$WIRE" = 0 ]; then
+    if git clone -q --depth 1 "$HUMANIZER_REPO" "$H"; then
+      owner_manifest record-clone ".opencode/skills/humanizer" "$HUMANIZER_REPO" || warn "no se pudo registrar el clon de humanizer"
+    else
+      warn "humanizer falló (opcional)"
+    fi
+  fi
+  if [ -e "$H/.git" ]; then
+    pin_vendor humanizer "$H" "$HUMANIZER_REPO" "$HUMANIZER_COMMIT" \
+      || warn "no se pudo activar el commit ${HUMANIZER_COMMIT:0:8} de humanizer; se usa la versión presente"
+  fi
 fi
 
 echo "== 5. Pisos emocionales (generados desde el framework High-Rise del vendor) =="

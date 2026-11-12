@@ -44,6 +44,6 @@ no el reloj del scheduler).
 - Recordatorio del diario: {{JOURNAL_TIME}}, de lunes a viernes (zona horaria declarada: {{TIMEZONE}}) — notificación del sistema operativo.
 - Revisión semanal: domingo {{INSIGHTS_TIME}} (headless con `opencode run --auto`, que pide la skill `insights` porque `opencode run` no ejecuta comandos `/`; solo si hay entradas).
 - Mantenimiento diario: {{MAINTENANCE_TIME}} (índice del diario + snapshot git).
-- Actualización del starter: lunes {{UPDATE_TIME}}.
+- Actualización del starter: lunes {{UPDATE_TIME}} (deja los skills en la versión que fija el paquete y re-cablea; no descarga versiones nuevas).
 Estos valores son una foto de la instalación: para cambiarlos edita `⚙️ Meta/brain-config.json` y re-ejecuta
 `bash install.sh <vault> --wire --with-schedule`.

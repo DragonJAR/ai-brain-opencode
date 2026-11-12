@@ -4,7 +4,7 @@ description: "Autochequeo del vault en OpenCode: instalación, config, plugin e 
 
 # /diagnose — Autochequeo del vault
 
-Revisa la salud de este vault tal como está instalado en OpenCode. No uses el skill `diagnose` del starter: audita una instalación de Claude Code (`CLAUDE.md`, hooks, `settings.json`) y daría este vault por roto.
+Revisa la salud de este vault tal como está instalado en OpenCode. Limítate a este vault: no inspecciones otros vaults ni otras carpetas del equipo. No uses el skill `diagnose` del starter: audita una instalación de Claude Code (`CLAUDE.md`, hooks, `settings.json`) y daría este vault por roto.
 
 ## Qué hacer
 

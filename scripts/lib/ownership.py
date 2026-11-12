@@ -72,8 +72,8 @@ PRESERVED = 3
 # --- What the package manages -------------------------------------------------
 # One list for install, uninstall and the drift report. A path outside it is
 # never removed, whatever the manifest says.
-STARTER_REL = ".opencode/skills/ai-brain-starter"
-VENDOR_CLONES = (STARTER_REL, ".opencode/skills/humanizer")
+VENDOR_CLONES = tuple(rel for rel, _url, _commit in vault_layout.VENDOR)
+STARTER_REL = VENDOR_CLONES[0]
 MANAGED_FILES = frozenset({
     ".opencode/plugins/brain-vault/index.js",
     "CLAUDE.md",

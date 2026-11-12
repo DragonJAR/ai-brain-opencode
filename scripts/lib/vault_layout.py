@@ -7,7 +7,7 @@ plugin/brain-vault/index.js keeps a copy of NOTE_TYPES (OpenCode runs it
 without Python); tests/test-vault-layout-single-source.sh fails on drift.
 
 Usage:
-    python3 vault_layout.py folders|roots|mcp-names
+    python3 vault_layout.py folders|roots|mcp-names|vendor
 """
 
 import sys
@@ -73,6 +73,18 @@ MCP_SERVERS = {
     "chatprd": "https://app.chatprd.ai/mcp",
 }
 
+# Third-party content, pinned. A vault only moves to another commit when this
+# package does, so every update reaches it through the package repository: the
+# installer and the scheduled job check these commits out, they never pull.
+# To adopt a newer vendor version, change the commit here and release.
+VENDOR = (
+    # (vault path, repository, commit)
+    (".opencode/skills/ai-brain-starter", "https://github.com/mycelium-hq/ai-brain-starter",
+     "0d6d2603920c506f63ed14d5c8e40b4543cc47b8"),
+    (".opencode/skills/humanizer", "https://github.com/adelaidasofia/humanizer.git",
+     "9c764db0e7331f27f803522205f01c78a0a67ed1"),
+)
+
 # Vendor skills the vault hides from the model with an opencode.json permission
 # rule. The starter's root SKILL.md (ID `ai-brain-starter`) is its installer for
 # Claude Code: loaded here it would re-run a setup this vault already has.
@@ -101,9 +113,10 @@ def main(argv):
             stream.reconfigure(encoding="utf-8", newline="\n")
         except (AttributeError, ValueError):
             pass
-    lists = {"folders": FOLDERS, "roots": roots(), "mcp-names": tuple(MCP_SERVERS)}
+    lists = {"folders": FOLDERS, "roots": roots(), "mcp-names": tuple(MCP_SERVERS),
+             "vendor": tuple("\t".join(entry) for entry in VENDOR)}
     if len(argv) != 1 or argv[0] not in lists:
-        print("uso: python3 vault_layout.py folders|roots|mcp-names", file=sys.stderr)
+        print("uso: python3 vault_layout.py folders|roots|mcp-names|vendor", file=sys.stderr)
         return 2
     for item in lists[argv[0]]:
         print(item)

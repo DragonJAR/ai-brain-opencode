@@ -57,6 +57,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   la página OEM o UTF-16 rompía la programación en Windows (ahora se decodifica). En macOS avisa si el vault está
   en Documentos, Escritorio, Descargas o iCloud Drive (launchd no puede leerlos) y reintenta unas pocas veces el
   `bootstrap` que choca con la descarga anterior del agente.
+- **CI:** corre también en los push a `dev`, shellcheck revisa `tests/` y el job de lint comprueba la sintaxis del
+  plugin (`node --check`).
 - **`check-personal-data.sh`:** no veía correos dentro de archivos binarios, una lista de términos con CRLF no
   coincidía con nada y una línea vacía en ella marcaba todo el paquete. Además, cualquier línea con "humanizer"
   quedaba exenta; ahora solo se eximen las URL de los clones del vendor. Los `#` de la lista son comentarios.

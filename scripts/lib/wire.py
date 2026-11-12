@@ -152,11 +152,12 @@ def main(argv):
     try:
         if manifest.is_symlink() or (vault / ".opencode").is_symlink():
             raise ownership.ManifestError("el manifiesto de propiedad es un symlink; no se sigue")
-        data = ownership.load_current(manifest)
-        try:
-            wire(data, vault, mode, names)
-        finally:
-            ownership.save(manifest, data)
+        with ownership.manifest_lock(manifest):
+            data = ownership.load_current(manifest)
+            try:
+                wire(data, vault, mode, names)
+            finally:
+                ownership.save(manifest, data)
     except ownership.ManifestError as error:
         print("fallo: " + str(error), file=sys.stderr)
         return error.exit_code

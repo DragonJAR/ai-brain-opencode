@@ -34,6 +34,7 @@ Actions:
     drift           <vault>      print "missing <what>" / "modified <what>" lines
     uninstall       <vault> <purge 0|1> <dry-run 0|1>
                                  remove the unchanged owned artifacts
+    check-uninstall <vault>      exit 1 unless an uninstall could trust the manifest
 
 Exit codes: 0 ok, 1 invalid/manifest error, 2 legacy manifest (fail closed),
 3 an existing path was preserved instead of installed.
@@ -42,6 +43,7 @@ Exit codes: 0 ok, 1 invalid/manifest error, 2 legacy manifest (fail closed),
 task names on Windows.
 """
 
+import contextlib
 import hashlib
 import json
 import os
@@ -50,6 +52,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 import uuid
 
 MANIFEST_REL = ".opencode/brain-vault-install-manifest.json"
@@ -174,10 +177,76 @@ def save(path, data):
         raise
 
 
+# --- Manifest lock ---------------------------------------------------------------
+# install, uninstall, schedule.sh and the update job (wire.py) all load, change
+# and save the manifest; the lock keeps one writer from losing another's records.
+LOCK_NAME = ".manifest.lock"
+LOCK_STALE_SECONDS = 300
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _lock_is_stale(lock):
+    try:
+        pid = int((lock / "pid").read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        pid = None
+    # On Windows os.kill(pid, 0) terminates the process: only the age counts there.
+    if pid is not None and os.name != "nt":
+        return not _pid_alive(pid)
+    try:
+        return time.time() - lock.stat().st_mtime > LOCK_STALE_SECONDS
+    except OSError:
+        return False
+
+
+@contextlib.contextmanager
+def manifest_lock(manifest):
+    lock = pathlib.Path(manifest).parent / LOCK_NAME
+    if not lock.parent.is_dir() or lock.parent.is_symlink():
+        yield
+        return
+    deadline = time.monotonic() + float(os.environ.get("BRAIN_MANIFEST_LOCK_TIMEOUT", "60"))
+    while True:
+        try:
+            os.mkdir(lock)
+            break
+        except FileExistsError:
+            if _lock_is_stale(lock):
+                stale = lock.with_name(LOCK_NAME + ".stale." + str(os.getpid()))
+                try:
+                    os.rename(lock, stale)
+                    shutil.rmtree(stale, ignore_errors=True)
+                except OSError:
+                    pass
+                continue
+            if time.monotonic() >= deadline:
+                raise ManifestError("el manifiesto de propiedad está en uso por otro proceso; si ninguno "
+                                    "lo usa, borra " + str(lock))
+            time.sleep(0.1)
+    try:
+        (lock / "pid").write_text(str(os.getpid()), encoding="utf-8")
+        yield
+    finally:
+        shutil.rmtree(lock, ignore_errors=True)
+
+
 def relative(value):
     path = pathlib.PurePosixPath(value)
-    if path.is_absolute() or ".." in path.parts or str(path) != value:
-        raise ManifestError("las rutas de propiedad deben ser relativas al vault, sin '..' ni absolutas")
+    if (path.is_absolute() or ".." in path.parts or str(path) != value
+            or "\\" in value or ":" in value):
+        raise ManifestError("las rutas de propiedad deben ser relativas al vault, sin '..', absolutas, "
+                            "barras invertidas ni unidades")
     return value
 
 
@@ -189,7 +258,13 @@ def safe_target(vault, value):
         current = current / part
         if current.is_symlink():
             raise ManifestError("la ruta atraviesa un directorio que es un symlink")
-    return pathlib.Path(vault).joinpath(*parts)
+    target = pathlib.Path(vault).joinpath(*parts)
+    # A Windows junction is not a symlink to is_symlink(); resolve() follows it.
+    try:
+        target.parent.resolve().relative_to(pathlib.Path(vault).resolve())
+    except ValueError:
+        raise ManifestError("la ruta sale del vault")
+    return target
 
 
 def is_wired(value):
@@ -442,16 +517,24 @@ def drift(data, vault):
 
 # --- Uninstall ------------------------------------------------------------------
 
+def load_for_uninstall(manifest, vault):
+    """The manifest an uninstall may trust, or ManifestError: nothing is provable without it."""
+    try:
+        if (vault / ".opencode").is_symlink() or manifest.is_symlink() or not manifest.is_file():
+            raise ManifestError("el manifiesto de propiedad no está o no es un archivo regular")
+        return load_current(manifest)
+    except (OSError, ValueError, TypeError, AttributeError) as error:
+        raise ManifestError(str(error))
+
+
 def uninstall(manifest, vault, purge, dry_run):
     vault = pathlib.Path(vault)
     manifest = pathlib.Path(manifest)
     try:
-        if (vault / ".opencode").is_symlink() or manifest.is_symlink() or not manifest.is_file():
-            raise ManifestError("el manifiesto de propiedad no está o no es un archivo regular")
-        data = load_current(manifest)
-    except (OSError, ValueError, TypeError, AttributeError, ManifestError) as error:
-        print("  ! propiedad ambigua; se preservaron los artefactos del vault: " + str(error))
-        return 0
+        data = load_for_uninstall(manifest, vault)
+    except ManifestError as error:
+        print("  ✗ propiedad no demostrable; no se eliminó nada: " + str(error))
+        return 1
 
     failures = []
     gone = "~" if dry_run else "-"
@@ -487,10 +570,8 @@ def uninstall(manifest, vault, purge, dry_run):
         except (OSError, ValueError, ManifestError) as error:
             refuse(value, error)
 
-    for value, expected in data["files"].items():
+    def remove_file(value, expected):
         try:
-            if not is_managed_file(value):
-                continue
             target = safe_target(vault, value)
             if target.is_file() and not target.is_symlink() and file_info(target) == expected:
                 if not dry_run:
@@ -500,6 +581,11 @@ def uninstall(manifest, vault, purge, dry_run):
                 print("  ! archivo modificado o no verificado, preservado: " + value)
         except (OSError, ValueError, ManifestError) as error:
             refuse(value, error)
+
+    # .gitignore hides the vendor clones: it goes last, and only if none remains.
+    for value, expected in data["files"].items():
+        if is_managed_file(value) and value != ".gitignore":
+            remove_file(value, expected)
 
     config_path = vault / "opencode.json"
     if not config_path.is_symlink() and config_path.is_file():
@@ -562,6 +648,14 @@ def uninstall(manifest, vault, purge, dry_run):
                 remove_tree(value, "clon del vendor",
                             lambda target, origin=origin: clone_is_pristine(target, origin))
 
+    if ".gitignore" in data["files"]:
+        remaining = [rel for rel in VENDOR_CLONES
+                     if os.path.lexists(str(vault.joinpath(*pathlib.PurePosixPath(rel).parts)))]
+        if remaining:
+            print("  ! .gitignore preservado: quedan clones del vendor (" + ", ".join(remaining) + ")")
+        else:
+            remove_file(".gitignore", data["files"][".gitignore"])
+
     if not dry_run:
         for value in MANAGED_DIRS:
             try:
@@ -605,6 +699,9 @@ def dispatch(path, action, argv):
 
     if action == "uninstall":
         return uninstall(path, argv[0], argv[1] == "1", argv[2] == "1")
+    if action == "check-uninstall":
+        load_for_uninstall(path, pathlib.Path(argv[0]))
+        return 0
 
     data = load(path)
 
@@ -703,7 +800,8 @@ def main(argv):
     path = pathlib.Path(argv[0])
     action = argv[1]
     try:
-        return dispatch(path, action, argv[2:])
+        with manifest_lock(path):
+            return dispatch(path, action, argv[2:])
     except LegacyManifest as error:
         if action == "cron-json":
             print("propiedad de cron heredada o no soportada; no se confían las entradas programadas", file=sys.stderr)

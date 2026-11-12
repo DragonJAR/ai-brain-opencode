@@ -3,6 +3,7 @@
 #   bash scripts/schedule.sh <ruta-del-vault>            instala (launchd en macOS, cron en Linux, schtasks en Windows)
 #   bash scripts/schedule.sh <ruta-del-vault> --dry-run  muestra los trabajos sin registrarlos
 #   bash scripts/schedule.sh <ruta-del-vault> --remove   elimina solo los trabajos verificados del paquete
+#   bash scripts/schedule.sh <ruta-del-vault> --remove --dry-run  lista lo que --remove eliminaría, sin tocar nada
 # Requisitos: macOS, Linux o Windows nativo (Git Bash, con cygpath).
 set -euo pipefail
 
@@ -11,9 +12,15 @@ MODE="${2:-install}"
 if [ "$VAULT" = "--help" ] || [ "$VAULT" = "-h" ] || [ "$MODE" = "--help" ] || [ "$MODE" = "-h" ]; then
   sed -n '2,/^set -/p' "$0" | sed '$d'; exit 0
 fi
-[ -n "$VAULT" ] || { echo "uso: $0 <ruta-del-vault> [--dry-run|--remove|--help]" >&2; exit 1; }
+[ -n "$VAULT" ] || { echo "uso: $0 <ruta-del-vault> [--dry-run|--remove [--dry-run]|--help]" >&2; exit 1; }
 [ -d "$VAULT" ] || { echo "  ✗ el vault no existe: $VAULT" >&2; exit 1; }
 case "$MODE" in install|--dry-run|--remove) ;; *) echo "  ✗ modo desconocido: $MODE" >&2; exit 2 ;; esac
+REMOVE_DRY_RUN=0
+case "$MODE ${3:-}" in
+  "--remove --dry-run") REMOVE_DRY_RUN=1 ;;
+  *" ") ;;
+  *) echo "  ✗ argumento inesperado: $3" >&2; exit 2 ;;
+esac
 
 LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
 [ -f "$LIB/common.sh" ] && [ -f "$LIB/ownership.py" ] && [ -f "$LIB/brain_config.py" ] \
@@ -70,8 +77,9 @@ bootout_loaded() {
 remove_owned_agent() {
   local agent_path="$1" label="$2"
   if [ ! -e "$agent_path" ] && [ ! -L "$agent_path" ]; then
-    owner_manifest forget-agent "$agent_path"
+    [ "$REMOVE_DRY_RUN" = 1 ] || owner_manifest forget-agent "$agent_path"
   elif owner_manifest agent-matches "$agent_path" >/dev/null 2>&1; then
+    if [ "$REMOVE_DRY_RUN" = 1 ]; then say "  ~ launch agent $agent_path"; return 0; fi
     bootout_loaded "$label"
     rm -f "$agent_path"
     owner_manifest forget-agent "$agent_path"
@@ -353,6 +361,7 @@ windows_remove() {
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     printf '%s\n' "$names" | grep -qxF "$name" || continue
+    if [ "$REMOVE_DRY_RUN" = 1 ]; then say "  ~ tarea $name"; removed=$((removed + 1)); continue; fi
     schtasks_native /Delete /F /TN "$name" || die "no se pudo borrar la tarea $name"
     ok "tarea eliminada: $name"
     removed=$((removed + 1))
@@ -366,7 +375,7 @@ EOF
   done <<EOF
 $names
 EOF
-  owner_manifest clear-cron
+  [ "$REMOVE_DRY_RUN" = 1 ] || owner_manifest clear-cron
   [ "$removed" -gt 0 ] || say "No hay tareas de Windows registradas del paquete para eliminar."
 }
 
@@ -395,6 +404,10 @@ if [ "$MODE" = "--remove" ]; then
     trap 'rm -f "$CURRENT" "$GENERATED" "$UPDATED"' EXIT
     read_crontab "$CURRENT" || { warn "no se pudo leer el crontab; se preservaron los registros de propiedad"; exit 1; }
     reconcile_crontab "$CURRENT" "$GENERATED" "$UPDATED" "$CRON_JSON" >/dev/null
+    if [ "$REMOVE_DRY_RUN" = 1 ]; then
+      diff "$CURRENT" "$UPDATED" | sed -n 's/^< /  ~ cron /p' || true
+      exit 0
+    fi
     if ! cmp -s "$CURRENT" "$UPDATED"; then crontab "$UPDATED"; fi
     owner_manifest clear-cron
   else

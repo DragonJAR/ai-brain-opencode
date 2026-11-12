@@ -17,6 +17,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **`snapshot_paths`:** aceptaba `.` (el snapshot diario confirmaba todo el vault, contenido personal incluido),
   barras invertidas, `.git`, comodines y pathspecs mágicos de git (`:/`, `:(glob)`). Esas entradas se descartan con
   aviso; si no queda ninguna válida se usa la lista por defecto. `install.sh --config` muestra los mismos avisos.
+- **`uninstall.sh --dry-run`:** solo decía que los trabajos programados "se conservan". Ahora lista las entradas de
+  cron, launch agents o tareas de Windows que se eliminarían, sin tocarlas (`schedule.sh --remove --dry-run`).
 
 ## [0.2.0] - 2026-11-11
 

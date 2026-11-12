@@ -46,7 +46,9 @@ for rel in "scripts" "scripts/jobs" ".opencode" ".opencode/skills" ".opencode/pl
 done
 
 if [ "$DRY_RUN" = 1 ]; then
-  echo "== Trabajos programados (dry-run: se conservan) =="
+  echo "== Trabajos programados que se eliminarían (dry-run) =="
+  bash "$PKG/scripts/schedule.sh" "$VAULT" --remove --dry-run \
+    || warn "no se pudo determinar qué trabajos programados se eliminarían"
 else
   echo "== Eliminando trabajos programados verificados =="
   bash "$PKG/scripts/schedule.sh" "$VAULT" --remove || {

@@ -1,49 +1,37 @@
 #!/usr/bin/env bash
 # Mantenimiento diario: índice del diario + snapshot git de lo nuevo.
 set -euo pipefail
-VAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-cd "$VAULT"
-mkdir -p "$VAULT/⚙️ Meta/logs"
-LOG="$VAULT/⚙️ Meta/logs/maintenance.log"
-
-if [ -f "$VAULT/scripts/lib/python3.sh" ]; then
-  # shellcheck source=/dev/null
-  . "$VAULT/scripts/lib/python3.sh"
-  require_python3 || { echo "$(date '+%F %T') sin Python 3 válido (python3, py -3, python)" >> "$LOG"; exit 1; }
-else
-  PY3="python3"   # vault instalado antes de que existiera la lib
-fi
+LIB="$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+[ -f "$LIB" ] || { echo "falta scripts/lib/common.sh; re-ejecuta install.sh sobre este vault" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$LIB"
+job_init maintenance
 
 if [ -f "⚙️ Meta/scripts/build-journal-index.py" ]; then
-  if ! $PY3 "⚙️ Meta/scripts/build-journal-index.py" --vault-root . >> "$LOG" 2>&1; then
-    echo "$(date '+%F %T') falló build-journal-index" >> "$LOG"
-    echo "falló build-journal-index" >&2
-    exit 1
-  fi
+  run_python "⚙️ Meta/scripts/build-journal-index.py" --vault-root . >> "$LOG" 2>&1 || job_fail "falló build-journal-index"
 else
-  echo "$(date '+%F %T') build-journal-index.py ausente; omitido" >> "$LOG"
+  job_log "build-journal-index.py ausente; omitido"
 fi
 
-if [ -d ".git" ]; then
-  paths_to_add=()
-  for p in "📓 Journals" "⚙️ Meta/Sessions" "⚙️ Meta/Decisions" "⚙️ Meta/journal-index.json"; do
-    [ -e "$p" ] && paths_to_add+=("$p")
-  done
-  if [ ${#paths_to_add[@]} -gt 0 ]; then
-    if ! git add "${paths_to_add[@]}" >> "$LOG" 2>&1; then
-      echo "$(date '+%F %T') falló git add" >> "$LOG"
-      echo "falló git add" >&2
-      exit 1
-    fi
-  fi
-  if ! git diff --cached --quiet 2>/dev/null; then
-    if ! git commit -q -m "chore: snapshot diario del vault" >> "$LOG" 2>&1; then
-      echo "$(date '+%F %T') falló git commit" >> "$LOG"
-      echo "falló git commit" >&2
-      exit 1
-    fi
-    echo "$(date '+%F %T') snapshot" >> "$LOG"
-  fi
-else
-  echo "$(date '+%F %T') sin repositorio git; omitido snapshot" >> "$LOG"
+if [ ! -d ".git" ]; then
+  job_log "sin repositorio git; omitido snapshot"
+  exit 0
+fi
+
+# Qué se confirma lo decide snapshot_paths en brain-config.json.
+SNAPSHOT="$(brain_config "$CFG" list snapshot_paths 2>> "$LOG")" || job_fail "no se pudo leer snapshot_paths"
+paths=()
+while IFS= read -r p; do
+  if [ -n "$p" ] && [ -e "$p" ]; then paths+=("$p"); fi
+done <<EOF
+$SNAPSHOT
+EOF
+[ "${#paths[@]}" -gt 0 ] || exit 0
+
+git add -- "${paths[@]}" >> "$LOG" 2>&1 || job_fail "falló git add"
+# El pathspec limita el commit a estas rutas: lo que el usuario tenga en el
+# index por su cuenta no entra en el snapshot.
+if ! git diff --cached --quiet -- "${paths[@]}" 2>/dev/null; then
+  git commit -q -m "chore: snapshot diario del vault" -- "${paths[@]}" >> "$LOG" 2>&1 || job_fail "falló git commit"
+  job_log "snapshot"
 fi

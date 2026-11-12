@@ -430,6 +430,7 @@ fi
 INSIGHTS_VAULT="$TMP_ROOT/insights-vault"
 INSIGHTS_BIN="$TMP_ROOT/insights-bin"
 mkdir -p "$INSIGHTS_VAULT/scripts/jobs" "$INSIGHTS_VAULT/📓 Journals" "$INSIGHTS_BIN"
+ai_brain_install_vault_libs "$PKG" "$INSIGHTS_VAULT"
 cp "$PKG/templates/jobs/insights-weekly.sh" "$INSIGHTS_VAULT/scripts/jobs/insights-weekly.sh"
 printf '# entrada\n' > "$INSIGHTS_VAULT/📓 Journals/hoy.md"
 set +e
@@ -453,6 +454,7 @@ if ! PATH="$INSIGHTS_BIN:/usr/bin:/bin" "$BASH_BIN" "$INSIGHTS_VAULT/scripts/job
 fi
 EMPTY_VAULT="$TMP_ROOT/insights-empty"
 mkdir -p "$EMPTY_VAULT/scripts/jobs" "$EMPTY_VAULT/📓 Journals"
+ai_brain_install_vault_libs "$PKG" "$EMPTY_VAULT"
 cp "$PKG/templates/jobs/insights-weekly.sh" "$EMPTY_VAULT/scripts/jobs/insights-weekly.sh"
 if ! PATH="$INSIGHTS_BIN:/usr/bin:/bin" "$BASH_BIN" "$EMPTY_VAULT/scripts/jobs/insights-weekly.sh" > "$TMP_ROOT/insights-empty.out" 2> "$TMP_ROOT/insights-empty.err"; then
   fail "insights-weekly failed when there were no journal entries"

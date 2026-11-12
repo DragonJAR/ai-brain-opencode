@@ -50,7 +50,8 @@ fi
 CMD=$(find .opencode/commands -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
 CMD_LABEL="comandos enlazados"; [ "$WIN" = 1 ] && CMD_LABEL="comandos copiados"
 [ "$CMD" -ge 1 ] && chk "$CMD_LABEL ($CMD)" 1 || chk "$CMD_LABEL ($CMD)" 0
-BAD=$(find .opencode -xtype l 2>/dev/null | wc -l | tr -d ' ')
+# `find -xtype` es solo de GNU: en macOS fallaba en silencio y este chequeo pasaba siempre.
+BAD=$(find .opencode -type l ! -exec test -e {} \; -print 2>/dev/null | wc -l | tr -d ' ')
 [ "$BAD" -eq 0 ] && chk "sin symlinks rotos" 1 || chk "symlinks rotos: $BAD" 0
 for d in "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "💼 Business" "🚀 I+D" "⚙️ Meta"; do
   [ -d "$d" ] && chk "carpeta $d" 1 || chk "carpeta $d" 0
@@ -82,22 +83,35 @@ fi
 echo "== Contenido y config =="
 [ -f AGENTS.md ] && chk "AGENTS.md presente" 1 || chk "AGENTS.md presente" 0
 grep -q "Vault Map" AGENTS.md 2>/dev/null && chk "Vault Map definido" 1 || chk "Vault Map definido" 0
-$PY3 -c "import json;json.load(open('⚙️ Meta/brain-config.json'))" 2>/dev/null && chk "brain-config.json válido" 1 || chk "brain-config.json válido" 0
+# shellcheck disable=SC2086  # PY3 puede ser "py -3"
+if [ -f "scripts/lib/brain_config.py" ] && CONFIG_NOTES="$($PY3 scripts/lib/brain_config.py "⚙️ Meta/brain-config.json" validate 2>&1)"; then
+  chk "brain-config.json válido" 1
+  # Un valor con forma inválida no rompe nada (se usa el valor por defecto), pero conviene verlo.
+  if [ -n "$CONFIG_NOTES" ]; then printf '%s\n' "$CONFIG_NOTES" | sed 's/^  ! /  ~ /'; fi
+else
+  chk "brain-config.json válido" 0
+fi
 FL=$(find "⚙️ Meta/Floors" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
 [ "$FL" -ge 1 ] && chk "notas de piso ($FL)" 1 || chk "notas de piso ($FL)" 0
 [ -f "⚙️ Meta/journal-config.md" ] && chk "journal-config.md presente" 1 || chk "journal-config.md presente" 0
 
 echo "== Propiedad de la instalación =="
-[ -f "scripts/lib/python3.sh" ] && chk "scripts/lib/python3.sh presente" 1 || chk "scripts/lib/python3.sh presente" 0
+for lib in python3.sh common.sh ownership.py wire.py brain_config.py brain-config.defaults.json; do
+  [ -f "scripts/lib/$lib" ] && chk "scripts/lib/$lib presente" 1 || chk "scripts/lib/$lib presente" 0
+done
 OWNER="scripts/lib/ownership.py"
-if [ -f "$OWNER" ]; then
-  if $PY3 "$OWNER" ".opencode/brain-vault-install-manifest.json" verify >/dev/null 2>&1; then
-    chk "manifiesto de propiedad válido" 1
-  else
-    chk "manifiesto de propiedad válido" 0
-  fi
+MANIFEST=".opencode/brain-vault-install-manifest.json"
+# shellcheck disable=SC2086
+if [ -f "$OWNER" ] && $PY3 "$OWNER" "$MANIFEST" verify >/dev/null 2>&1; then
+  chk "manifiesto de propiedad válido" 1
+  # Deriva entre el manifiesto y el disco. Lo que falta es un fallo; lo que el
+  # usuario modificó es suyo y solo se informa (la desinstalación lo preservará).
+  DRIFT="$($PY3 "$OWNER" "$MANIFEST" drift "$VAULT" 2>/dev/null)"
+  MISSING="$(printf '%s\n' "$DRIFT" | grep -c '^missing ' || true)"
+  [ "$MISSING" -eq 0 ] && chk "artefactos registrados presentes" 1 || chk "artefactos registrados ausentes: $MISSING" 0
+  printf '%s\n' "$DRIFT" | sed -n 's/^missing /  ✗ falta: /p; s/^modified /  ~ modificado por ti: /p'
 else
-  chk "scripts/lib/ownership.py presente ($OWNER)" 0
+  chk "manifiesto de propiedad válido" 0
 fi
 
 echo "== Plugin =="

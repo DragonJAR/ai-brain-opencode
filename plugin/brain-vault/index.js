@@ -23,6 +23,8 @@ const DEFAULTS = {
   habits: [],
   accountability: [],
   extra_rules: [],
+  // Lo que confirma el snapshot diario (lo lee daily-maintenance.sh, no el plugin).
+  snapshot_paths: ["📓 Journals", "⚙️ Meta/Sessions", "⚙️ Meta/Decisions", "⚙️ Meta/journal-index.json"],
   schedule: {
     insights_time: "21:00",
     maintenance_time: "03:30",

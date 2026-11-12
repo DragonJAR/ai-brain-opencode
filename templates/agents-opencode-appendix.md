@@ -6,7 +6,7 @@ Se genera en la primera instalación, junto con el resto de `AGENTS.md`. Ninguna
 Responde y escribe en {{LANGUAGE}}. Los nombres de carpeta quedan en inglés a propósito: los skills del sistema tienen rutas fijas y traducirlos genera carpetas duplicadas.
 
 ### Diario
-- Compromiso: `/journal` a las {{JOURNAL_TIME}} ({{TIMEZONE}}).
+- Compromiso: `/daily-journal` a las {{JOURNAL_TIME}} ({{TIMEZONE}}).
 - Hábitos trackeados: {{HABITS}}.
 - Accountability: {{ACCOUNTABILITY}}.
 - Cada entrada se etiqueta sola con su piso emocional (High-Rise, 34 niveles). Notas de piso en `⚙️ Meta/Floors/`. Tú nunca te autoetiquetas.

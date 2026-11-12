@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# python3 ownership record-links invocations must not grow linearly with N skills.
+# The wiring must cost the same number of Python processes for 5 or 20 skills:
+# wire.py does one pass with one manifest read and one write.
 set -euo pipefail
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,9 +38,9 @@ count_record_links_for_n() {
   cat > "$bin/python3" <<PYWRAP
 #!/bin/sh
 for arg in "\$@"; do
-  if [ "\$arg" = "record-links" ]; then
-    printf 'record-links\n' >> "$rl_log"
-  fi
+  case "\$arg" in
+    */wire.py|*/ownership.py) printf 'spawn\n' >> "$rl_log" ;;
+  esac
 done
 exec "$real_py" "\$@"
 PYWRAP
@@ -67,24 +68,19 @@ C5="$(count_record_links_for_n 5)"
 C20="$(count_record_links_for_n 20)"
 
 if [ -z "$C5" ] || [ -z "$C20" ]; then
-  printf 'FAIL: could not measure record-links counts\n' >&2
+  printf 'FAIL: could not measure the wiring invocations\n' >&2
   exit 1
 fi
 
-# The batch must actually run: zero invocations means the wiring never happened.
+# The wiring must actually run.
 if [ "$C5" -lt 1 ]; then
-  printf 'FAIL: record-links was never invoked for N=5 (%s calls)\n' "$C5" >&2
+  printf 'FAIL: the wiring libraries were never invoked for N=5 (%s calls)\n' "$C5" >&2
   exit 1
 fi
 
-# With batching, flush_links runs once per phase — counts must match across N.
+# One pass per phase — counts must match across N.
 if [ "$C5" != "$C20" ]; then
-  printf 'FAIL: record-links grew with skill count: N=5 → %s calls, N=20 → %s calls\n' "$C5" "$C20" >&2
+  printf 'FAIL: Python invocations grew with skill count: N=5 → %s calls, N=20 → %s calls\n' "$C5" "$C20" >&2
   exit 1
 fi
-if [ "$C20" -ge 20 ]; then
-  printf 'FAIL: record-links count %s is linear with N=20 (batching missing)\n' "$C20" >&2
-  exit 1
-fi
-
-printf 'PASS: record-links batched (N=5 and N=20 both %s calls, not linear)\n' "$C20"
+printf 'PASS: wiring cost is constant (N=5 and N=20 both %s Python invocations)\n' "$C20"

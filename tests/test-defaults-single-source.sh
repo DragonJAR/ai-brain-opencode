@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Anti-drift: templates/brain-config.example.json must match plugin DEFAULTS,
 # install seed (non-mutated keys), journal-reminder fallbacks, and schedule.sh
-# package defaults when vault config is absent.
+# package defaults when vault config is absent. The shell side reads them only
+# through scripts/lib/brain_config.py; the plugin keeps a mirrored copy.
 set -euo pipefail
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -104,18 +105,8 @@ fi
 SEED_VAULT="$TMP_ROOT/seed-vault"
 mkdir -p "$SEED_VAULT/⚙️ Meta"
 SEED_BRC="$SEED_VAULT/⚙️ Meta/brain-config.json"
-cp "$EXAMPLE" "$SEED_BRC"
-python3 - "$PKG/install.sh" "$SEED_BRC" "seed-vault" <<'PY'
-import pathlib, re, sys
-install = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-m = re.search(r"python3 - \"\$BRC\" \"\$SLUG\" <<'PZ'.*?\n(.*?)^PZ\n", install, re.S | re.M)
-if not m:
-    raise SystemExit("FAIL: could not extract install.sh seed block")
-code = m.group(1)
-code = re.sub(r'^print\("  \+ config por defecto.*\n', "", code, count=1, flags=re.M)
-sys.argv = ["seed", sys.argv[2], sys.argv[3]]
-exec(compile(code, "install.sh:seed", "exec"), {})
-PY
+# The installer seeds through the shared reader (scripts/lib/brain_config.py seed).
+python3 "$PKG/scripts/lib/brain_config.py" "$SEED_BRC" seed "seed-vault" >/dev/null
 
 sget() {
   python3 - "$SEED_BRC" "$1" <<'PY'
@@ -133,23 +124,18 @@ assert_same schedule.maintenance_time "templates/brain-config.example.json" "$C_
 assert_same schedule.update_time "templates/brain-config.example.json" "$C_UT" "install.sh seed" "$(sget schedule.update_time)"
 
 # --- (c) journal-reminder.sh fallbacks --------------------------------------
-JR="$PKG/templates/jobs/journal-reminder.sh"
-JR_NAME="$(python3 - "$JR" <<'PY'
-import pathlib, re, sys
-text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-m = re.search(r'print\(str\(cfg\.get\("vault_name"\) or "([^"]+)"\)\)', text)
-print(m.group(1) if m else "")
-PY
-)"
-JR_TIME="$(python3 - "$JR" <<'PY'
-import pathlib, re, sys
-text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-m = re.search(r'print\(time if isinstance\(time, str\) and time else "([^"]+)"\)', text)
-print(m.group(1) if m else "")
-PY
-)"
-assert_same vault_name "templates/brain-config.example.json" "$C_VAULT" "journal-reminder.sh fallback" "$JR_NAME"
-assert_same journal.time "templates/brain-config.example.json" "$C_JTIME" "journal-reminder.sh fallback" "$JR_TIME"
+# The job reads the config through the shared reader; with no vault config the
+# reminder must announce the package defaults.
+JR_VAULT="$TMP_ROOT/jr-vault"
+mkdir -p "$JR_VAULT/scripts/jobs" "$TMP_ROOT/jr-bin"
+ai_brain_install_vault_libs "$PKG" "$JR_VAULT"
+cp "$PKG/templates/jobs/journal-reminder.sh" "$JR_VAULT/scripts/jobs/journal-reminder.sh"
+ai_brain_mock_platform "$TMP_ROOT/jr-bin"
+JR_OUT="$(MOCK_UNAME=FreeBSD PATH="$TMP_ROOT/jr-bin:$PATH" bash "$JR_VAULT/scripts/jobs/journal-reminder.sh")"
+case "$JR_OUT" in
+  "$C_VAULT: "*"($C_JTIME)"*) ;;
+  *) fail_divergent "vault_name/journal.time" "templates/brain-config.example.json" "$C_VAULT $C_JTIME" "journal-reminder.sh fallback" "$JR_OUT" ;;
+esac
 
 # --- (d) schedule.sh with absent vault config --------------------------------
 # Darwin --dry-run prints launchd plists, not cron. Force Linux via mocked uname

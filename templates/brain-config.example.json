@@ -13,6 +13,12 @@
   "habits": [],
   "accountability": [],
   "extra_rules": [],
+  "snapshot_paths": [
+    "📓 Journals",
+    "⚙️ Meta/Sessions",
+    "⚙️ Meta/Decisions",
+    "⚙️ Meta/journal-index.json"
+  ],
   "schedule": {
     "insights_time": "21:00",
     "maintenance_time": "03:30",

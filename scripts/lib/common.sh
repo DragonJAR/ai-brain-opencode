@@ -54,6 +54,34 @@ copy_new_floors() {
   printf '%s' "$copied"
 }
 
+# git_commit_paths <mensaje> <ruta...>: confirma en el repo del cwd solo esas
+# rutas, borrados incluidos. Omite (y nombra en stderr) las que el .gitignore
+# excluye, porque `git add` aborta con ellas. Sin firma, editor ni prompts: corre
+# sin nadie delante. Sale con 0 también si no hay nada que confirmar.
+git_commit_paths() {
+  local message="$1" p
+  local paths=()
+  shift
+  for p in "$@"; do
+    if [ -e "$p" ] || [ -L "$p" ]; then
+      if git check-ignore -q -- "$p" 2>/dev/null; then
+        printf 'snapshot: %s está en .gitignore; omitida\n' "$p" >&2
+        continue
+      fi
+    elif [ -z "$(git ls-files -- "$p" 2>/dev/null)" ]; then
+      continue
+    fi
+    paths+=("$p")
+  done
+  [ "${#paths[@]}" -gt 0 ] || return 0
+  export GIT_LITERAL_PATHSPECS=1 GIT_TERMINAL_PROMPT=0
+  git add -A -- "${paths[@]}" < /dev/null || return 1
+  # El pathspec limita el commit a estas rutas: lo que el usuario tenga en el
+  # index por su cuenta no entra.
+  git diff --cached --quiet -- "${paths[@]}" 2>/dev/null && return 0
+  git -c commit.gpgsign=false commit -q -m "$message" -- "${paths[@]}" < /dev/null
+}
+
 # --- Trabajos programados ------------------------------------------------------
 # job_log_file <vault> <trabajo>: el único nombre de log de un trabajo. Lo usan
 # job_init y cada backend del scheduler, así la rotación cubre toda la salida.

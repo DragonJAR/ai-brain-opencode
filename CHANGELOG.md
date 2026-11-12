@@ -44,6 +44,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **Tiempo límite de los trabajos:** al agotarse mataba solo el proceso hijo y dejaba vivos sus descendientes
   (p. ej. el servidor de `opencode run`). Ahora mata todo el grupo de procesos (TERM y luego KILL) y en Git Bash
   usa `taskkill /T /F` (simulado en las pruebas; pendiente de validar en una máquina Windows real).
+- **Snapshot diario:** una ruta de `snapshot_paths` que tu `.gitignore` ignora hacía fallar el trabajo entero, una
+  carpeta borrada nunca se confirmaba y con `commit.gpgsign` activo el commit fallaba o esperaba la frase de paso.
+  Ahora se omiten (y se anotan) las rutas ignoradas, los borrados entran en el snapshot y el commit no se firma ni
+  pide nada.
 - **`check-personal-data.sh`:** no veía correos dentro de archivos binarios, una lista de términos con CRLF no
   coincidía con nada y una línea vacía en ella marcaba todo el paquete. Además, cualquier línea con "humanizer"
   quedaba exenta; ahora solo se eximen las URL de los clones del vendor. Los `#` de la lista son comentarios.

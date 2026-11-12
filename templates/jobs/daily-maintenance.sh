@@ -22,16 +22,12 @@ fi
 SNAPSHOT="$(brain_config "$CFG" list snapshot_paths 2>> "$LOG")" || job_fail "no se pudo leer snapshot_paths"
 paths=()
 while IFS= read -r p; do
-  if [ -n "$p" ] && [ -e "$p" ]; then paths+=("$p"); fi
+  if [ -n "$p" ]; then paths+=("$p"); fi
 done <<EOF
 $SNAPSHOT
 EOF
 [ "${#paths[@]}" -gt 0 ] || exit 0
 
-git add -- "${paths[@]}" >> "$LOG" 2>&1 || job_fail "falló git add"
-# El pathspec limita el commit a estas rutas: lo que el usuario tenga en el
-# index por su cuenta no entra en el snapshot.
-if ! git diff --cached --quiet -- "${paths[@]}" 2>/dev/null; then
-  git commit -q -m "chore: snapshot diario del vault" -- "${paths[@]}" >> "$LOG" 2>&1 || job_fail "falló git commit"
-  job_log "snapshot"
-fi
+BEFORE="$(git rev-parse -q --verify HEAD 2>/dev/null || true)"
+git_commit_paths "chore: snapshot diario del vault" "${paths[@]}" >> "$LOG" 2>&1 || job_fail "falló el snapshot git"
+if [ "$(git rev-parse -q --verify HEAD 2>/dev/null || true)" != "$BEFORE" ]; then job_log "snapshot"; fi

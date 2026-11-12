@@ -34,7 +34,7 @@ mapea cada mecanismo, para saber qué está portado, qué se sustituyó y qué n
 | Hook/script CC | Sustituto |
 |---|---|
 | auto-update cada ~6 días al abrir sesión | trabajo programado semanal (`update-brain.sh`, ff-only) |
-| insights semanal/mensual (cron) | trabajo programado semanal con `opencode run` y gate por número de entradas |
+| insights semanal/mensual (cron) | trabajo programado semanal con `opencode run --auto` (y `--archived` si existe) y gate por número de entradas; invoca `--command insights` si la CLI lo ofrece y, si no (OpenCode v2 no lo tiene y no interpreta `/insights` dentro del mensaje), nombra la skill `insights` |
 | daily job (ramas, worktrees, disco) | trabajo programado diario: índice del diario + snapshot git |
 | session-end-hook.sh (cascade) | protocolo de sesión en AGENTS.md + hook de prompt |
 | post-tool-use-learnings.py | memoria indexada del entorno (Engram o equivalente) |

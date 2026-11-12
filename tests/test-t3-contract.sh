@@ -443,12 +443,7 @@ fi
 if ! grep -Fq 'opencode no disponible' "$TMP_ROOT/insights-miss.err"; then
   fail "insights-weekly did not write the missing-opencode error to stderr"
 fi
-cat > "$INSIGHTS_BIN/opencode" <<'SH'
-#!/bin/sh
-printf '%s\n' "$*"
-exit 0
-SH
-chmod +x "$INSIGHTS_BIN/opencode"
+ai_brain_mock_opencode "$INSIGHTS_BIN"
 if ! PATH="$INSIGHTS_BIN:/usr/bin:/bin" "$BASH_BIN" "$INSIGHTS_VAULT/scripts/jobs/insights-weekly.sh" > "$TMP_ROOT/insights-ok.out" 2> "$TMP_ROOT/insights-ok.err"; then
   fail "insights-weekly failed when opencode was on PATH"
 fi

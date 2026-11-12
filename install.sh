@@ -257,7 +257,7 @@ fi
 if [ "$WIRE_MODE" = "copy" ]; then
   echo "== 3. Cablear skills y comandos (copias, sin symlinks) =="
 else
-  echo "== 3. Cablear skills y comandos (symlinks relativos, sin copias) =="
+  echo "== 3. Cablear skills (symlinks relativos) y comandos (copias adaptadas a OpenCode) =="
 fi
 wire_vendor skills,commands
 PKG_COMMANDS=()
@@ -344,7 +344,7 @@ else
 import pathlib, re, sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, sys.argv[5])
-import brain_config
+import brain_config, wire
 tpl = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
 app = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
 try:
@@ -361,8 +361,7 @@ def adapt(pattern, replacement, text, what):
         missing.append(what)
     return result
 
-src = tpl.replace("~/.claude/skills/humanizer", ".opencode/skills/humanizer")
-src = src.replace("~/.claude/skills/ai-brain-starter", ".opencode/skills/ai-brain-starter")
+src = wire.adapt_for_opencode(tpl)
 src = adapt(r"8\. \*\*Your brain lives in the vault.*?(?=\n\n9\. )",
     "8. **Tu cerebro vive en el vault — nunca solo en la memoria del agente.** Todo lo que valga entre sesiones termina como archivo de este vault (nota, decisión, regla). Test: \"¿otra máquina, otra herramienta, el próximo mes — sigue aquí?\"",
     src, "regla 8 (el cerebro vive en el vault)")

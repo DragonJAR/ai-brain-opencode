@@ -3,7 +3,9 @@
 
 One pass, one manifest read and one write. install.sh and the scheduled update
 job both use it, so a starter update is wired exactly as it was installed.
-Relative symlinks on POSIX, copies on Windows.
+Relative symlinks on POSIX, copies on Windows. Commands are always copies:
+they are written for Claude Code and get rewritten for OpenCode
+(adapt_for_opencode), so a vendor update refreshes them like any owned copy.
 
 Usage:
     python3 wire.py <vault> [--mode link|copy] [--only skills,commands,scripts]
@@ -25,12 +27,50 @@ import ownership  # noqa: E402
 SECTIONS = {
     "skills": ("skills", ".opencode/skills", "ai-brain-starter/skills/", "dir", (),
                "skills", "enlazadas", "copiadas"),
-    "commands": ("commands", ".opencode/commands", "../skills/ai-brain-starter/commands/", "file", (".md",),
+    "commands": ("commands", ".opencode/commands", None, "file", (".md",),
                  "comandos", "enlazados", "copiados"),
     "scripts": ("scripts", "⚙️ Meta/scripts", "../../.opencode/skills/ai-brain-starter/scripts/", "file",
                 (".py", ".sh"), "scripts", "enlazados", "copiados"),
 }
 RESERVED = {pathlib.PurePosixPath(rel).name for rel in ownership.VENDOR_CLONES}
+# Sections copied and rewritten on every platform.
+REWRITTEN = {"commands"}
+# Claude Code wording in vendor text -> OpenCode, in order. install.sh applies it to AGENTS.md too.
+OPENCODE_REWRITES = (
+    ("~/.claude/skills/ai-brain-starter", ownership.STARTER_REL),
+    ("~/.claude/skills/humanizer", ".opencode/skills/humanizer"),
+    ("the Skill tool", "the `skill` tool"),
+    ("Skill tool", "`skill` tool"),
+)
+
+
+def adapt_for_opencode(text):
+    for old, new in OPENCODE_REWRITES:
+        text = text.replace(old, new)
+    return text
+
+
+def adapt_bytes(content):
+    try:
+        return adapt_for_opencode(content.decode("utf-8")).encode("utf-8")
+    except UnicodeDecodeError:
+        return content
+
+
+def drop_owned_link(data, vault, rel):
+    """A previous install linked this path; an unchanged owned link gives way to the copy."""
+    expected = data["symlinks"].get(rel)
+    if expected is None:
+        return
+    try:
+        target = ownership.safe_target(vault, rel)
+        if target.is_symlink() and os.readlink(target) == expected:
+            target.unlink()
+        elif target.exists() or target.is_symlink():
+            return
+    except (OSError, ownership.ManifestError):
+        return
+    del data["symlinks"][rel]
 
 
 def default_mode():
@@ -110,22 +150,28 @@ def wire(data, vault, mode, names):
     for name in names:
         subdir, vault_dir, target_prefix, kind, suffixes, noun, linked, copied = SECTIONS[name]
         entries = vendor_entries(starter / subdir, kind, suffixes)
+        rewrite = name in REWRITTEN
+        copy = rewrite or mode == "copy"
         managed = 0
         for entry in entries:
             rel = vault_dir + "/" + entry.name
-            if mode == "link":
+            if not copy:
                 reason = ownership.put_link(data, vault, rel, target_prefix + entry.name)
+            elif kind == "dir":
+                reason = ownership.put_tree(data, vault, rel, entry)
             else:
-                put = ownership.put_tree if kind == "dir" else ownership.put_file
-                reason = put(data, vault, rel, entry)
-                if reason is None and rel not in data["wired"]:
-                    data["wired"].append(rel)
+                if rewrite:
+                    drop_owned_link(data, vault, rel)
+                reason = ownership.put_file(data, vault, rel, entry,
+                                            transform=adapt_bytes if rewrite else None)
+            if copy and reason is None and rel not in data["wired"]:
+                data["wired"].append(rel)
             if reason is None:
                 managed += 1
             else:
                 ownership.warn(reason)
         pruned = prune(data, vault, vault_dir, {entry.name for entry in entries})
-        print("  + %d %s %s" % (managed, noun, linked if mode == "link" else copied))
+        print("  + %d %s %s" % (managed, noun, copied if copy else linked))
         if pruned:
             print("  - %d %s que el starter ya no trae, retirados" % (pruned, noun))
 

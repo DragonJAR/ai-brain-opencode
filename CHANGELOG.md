@@ -85,6 +85,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 ### Añadido
 - `tests/run.sh` descubre también `tests/test-*.mjs`; regresiones para la salida UTF-8 de `/audit`, el bus de
   `notify-send`, la limpieza de `AGENTS.md` y el aviso falso de symlink al reinstalar.
+- **Comandos del starter en OpenCode:** se enlazaban tal cual y pedían usar "the Skill tool" (de Claude Code) y
+  correr `~/.claude/skills/ai-brain-starter/bootstrap.sh`. Ahora se copian en todas las plataformas adaptados:
+  nombran la herramienta `skill` de OpenCode y la ruta `.opencode/skills/ai-brain-starter/` del vault. Las copias
+  quedan en el manifiesto por huella: la actualización semanal las refresca si no las tocaste, la desinstalación
+  quita solo las que siguen igual, y `verify.sh` las cuenta. Los enlaces de una instalación anterior se reemplazan
+  al re-cablear. `AGENTS.md` usa la misma adaptación.
 - **Ayuda y flags iguales en todos los scripts:** `install.sh`, `uninstall.sh`, `scripts/schedule.sh`,
   `scripts/verify.sh` y `scripts/check-personal-data.sh` usan la misma `usage()` de `scripts/lib/common.sh`:
   `-h`/`--help` imprime la ayuda y sale con 0; una flag desconocida o un argumento de más o de menos sale con 2 y

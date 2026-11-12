@@ -84,7 +84,8 @@ install_vault "$A" && fail "install accepted a dangling AGENTS.md symlink"
 # 5. verify.sh: package commands do not stand in for the vendor wiring.
 rm "$V/.opencode/commands/brain-journal.md"
 bash "$V/scripts/verify.sh" > "$TMP_ROOT/verify-cmd.txt" 2>&1 || true
-grep -Fq '✗ comandos enlazados' "$TMP_ROOT/verify-cmd.txt" \
+# Starter commands are copies on every platform now (rewritten for OpenCode), hence "copiados".
+grep -Fq '✗ comandos copiados' "$TMP_ROOT/verify-cmd.txt" \
   || fail "verify counted package commands as vendor wiring: $(grep -F 'comandos' "$TMP_ROOT/verify-cmd.txt")"
 
 # 6. verify.sh: a broken link in ⚙️ Meta/scripts is reported.

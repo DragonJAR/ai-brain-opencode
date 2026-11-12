@@ -456,8 +456,11 @@ fi
 
 if [ "$WITH_MCP" = 1 ]; then
   echo "== 12. MCP remotos (opt-in) =="
+  # El vault ya está instalado: un fallo aquí se avisa y se omite, nunca aborta.
   if [ -L "$VAULT/opencode.json" ]; then
     warn "opencode.json es un symlink; se preservó sin modificarlo"
+  elif [ -e "$VAULT/opencode.jsonc" ] || [ -L "$VAULT/opencode.jsonc" ]; then
+    warn "existe opencode.jsonc: se omitió la configuración MCP para no crear una segunda configuración; agrega a mano granola y chatprd"
   else
     OPENCODE_EXISTED=0
     if [ -e "$VAULT/opencode.json" ]; then OPENCODE_EXISTED=1; fi
@@ -466,7 +469,10 @@ import json, pathlib, sys
 p = pathlib.Path(sys.argv[1])
 if p.exists() and (p.is_symlink() or not p.is_file() or p.stat().st_nlink != 1):
     raise SystemExit("refusing to modify a symlinked, non-regular, or hard-linked opencode.json")
-d = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"$schema": "https://opencode.ai/config.json"}
+try:
+    d = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"$schema": "https://opencode.ai/config.json"}
+except ValueError:
+    raise SystemExit("opencode.json no es JSON estricto (¿comentarios o comas finales?); agrega a mano granola y chatprd")
 if not isinstance(d, dict):
     raise SystemExit("refusing to modify opencode.json with a non-object root")
 servers = d.setdefault("mcp", {}).setdefault("servers", {})
@@ -482,11 +488,14 @@ if added:
 print(json.dumps(added, separators=(",", ":"), ensure_ascii=False))
 PY
     )"; then
-      die "no se pudo configurar MCP en opencode.json: $MCP_ADDED"
+      warn "se omitió la configuración MCP: $MCP_ADDED"
+    else
+      if [ "$MCP_ADDED" != "{}" ] && ! owner_manifest record-config "$MCP_ADDED"; then
+        warn "no se pudo registrar la configuración MCP; la desinstalación no quitará granola ni chatprd"
+      fi
+      if [ "$OPENCODE_EXISTED" = 0 ] && [ -f "$VAULT/opencode.json" ]; then BASE_PATHS+=("opencode.json"); fi
+      ok "MCP remotos configurados sin sobrescribir entradas existentes"
     fi
-    [ "$MCP_ADDED" = "{}" ] || owner_manifest record-config "$MCP_ADDED" || die "no se pudo registrar la configuración MCP"
-    if [ "$OPENCODE_EXISTED" = 0 ] && [ -f "$VAULT/opencode.json" ]; then BASE_PATHS+=("opencode.json"); fi
-    ok "MCP remotos configurados sin sobrescribir entradas existentes"
   fi
 fi
 

@@ -10,6 +10,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   comandos, configurar, actualizar).
 
 ### Corregido
+- **Instalador del vendor visible para el modelo:** el `SKILL.md` raíz del starter (un instalador para Claude
+  Code) se anunciaba como skill dentro del vault. Ahora queda oculto con una regla de permisos en `opencode.json`,
+  registrada en el manifiesto y revertida al desinstalar. La edición de `opencode.json` (esa regla y los MCP de
+  `--with-mcp`) vive en un solo lugar, `ownership.py`, para el alta y la baja.
+- **Skills del starter leídos en OpenCode:** `AGENTS.md` explica cómo interpretar sus referencias a `~/.claude`,
+  `CLAUDE.md` y los hooks.
 - **Comandos que se sugerían y no existían:** los skills del vendor y el instalador hablaban de `/journal` y de
   una "entrevista de setup" sin comando. `/journal` es ahora un alias de `/daily-journal`, y `/setup-brain` es la
   entrevista del paquete: completa `AGENTS.md` y `brain-config.json` sin cargar el instalador del vendor, que es

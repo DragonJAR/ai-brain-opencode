@@ -73,6 +73,11 @@ MCP_SERVERS = {
     "chatprd": "https://app.chatprd.ai/mcp",
 }
 
+# Vendor skills the vault hides from the model with an opencode.json permission
+# rule. The starter's root SKILL.md (ID `ai-brain-starter`) is its installer for
+# Claude Code: loaded here it would re-run a setup this vault already has.
+DENIED_SKILLS = ("ai-brain-starter",)
+
 
 def roots():
     """Top-level folders, in FOLDERS order."""

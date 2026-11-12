@@ -526,55 +526,28 @@ else
   case "$rc" in 0|3) ;; *) warn "no se pudo completar .gitignore" ;; esac
 fi
 
-if [ "$WITH_MCP" = 1 ]; then
-  echo "== 12. MCP remotos (opt-in) =="
-  # El vault ya está instalado: un fallo aquí se avisa y se omite, nunca aborta.
-  MCP_NAMES="$(run_python "$LIB/vault_layout.py" mcp-names | tr -d '\r' | paste -sd ',' - | sed 's/,/, /g')"
-  if [ -L "$VAULT/opencode.json" ]; then
-    warn "opencode.json es un symlink; se preservó sin modificarlo"
-  elif [ -e "$VAULT/opencode.jsonc" ] || [ -L "$VAULT/opencode.jsonc" ]; then
-    warn "existe opencode.jsonc: se omitió la configuración MCP para no crear una segunda configuración; agrega a mano $MCP_NAMES"
-  else
-    OPENCODE_EXISTED=0
-    if [ -e "$VAULT/opencode.json" ]; then OPENCODE_EXISTED=1; fi
-    if ! MCP_ADDED="$(run_python - "$VAULT/opencode.json" "$LIB" 2>&1 <<'PY'
-import json, pathlib, sys
-sys.dont_write_bytecode = True
-sys.path.insert(0, sys.argv[2])
-from vault_layout import MCP_SERVERS
-names = ", ".join(MCP_SERVERS)
-p = pathlib.Path(sys.argv[1])
-if p.exists() and (p.is_symlink() or not p.is_file() or p.stat().st_nlink != 1):
-    raise SystemExit("refusing to modify a symlinked, non-regular, or hard-linked opencode.json")
-try:
-    d = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"$schema": "https://opencode.ai/config.json"}
-except ValueError:
-    raise SystemExit("opencode.json no es JSON estricto (¿comentarios o comas finales?); agrega a mano " + names)
-if not isinstance(d, dict):
-    raise SystemExit("refusing to modify opencode.json with a non-object root")
-servers = d.setdefault("mcp", {}).setdefault("servers", {})
-if not isinstance(servers, dict):
-    raise SystemExit("refusing to modify a non-object mcp.servers configuration")
-added = {}
-for name, url in MCP_SERVERS.items():
-    if name not in servers:
-        servers[name] = {"type": "remote", "url": url}
-        added[name] = servers[name]
-if added:
-    p.write_text(json.dumps(d, indent=2) + "\n", encoding="utf-8")
-print(json.dumps(added, separators=(",", ":"), ensure_ascii=False))
-PY
-    )"; then
-      warn "se omitió la configuración MCP: $MCP_ADDED"
-    else
-      if [ "$MCP_ADDED" != "{}" ] && ! owner_manifest record-config "$MCP_ADDED"; then
-        warn "no se pudo registrar la configuración MCP; la desinstalación no quitará $MCP_NAMES"
-      fi
-      if [ "$OPENCODE_EXISTED" = 0 ] && [ -f "$VAULT/opencode.json" ]; then BASE_PATHS+=("opencode.json"); fi
-      ok "MCP remotos configurados sin sobrescribir entradas existentes"
+echo "== 12. opencode.json del vault =="
+# Oculta al modelo el instalador del vendor (un skill para Claude Code) y, con
+# --with-mcp, agrega los MCP remotos. El vault ya está instalado: si el archivo
+# no se puede tocar se avisa y se sigue; cada entrada agregada queda registrada.
+OPENCODE_EXISTED=0
+if [ -e "$VAULT/opencode.json" ] || [ -L "$VAULT/opencode.json" ]; then OPENCODE_EXISTED=1; fi
+CONFIG_RC=0
+CONFIG_STATUS="$(owner_manifest configure "$VAULT" "$WITH_MCP")" || CONFIG_RC=$?
+case "$CONFIG_RC" in
+  0)
+    if [ "$OPENCODE_EXISTED" = 0 ] && [ -f "$VAULT/opencode.json" ]; then BASE_PATHS+=("opencode.json"); fi
+    if [ "$CONFIG_STATUS" = "unchanged" ]; then ok "opencode.json ya tenía las entradas del paquete"; else ok "skill instalador del vendor oculto (regla de permisos en opencode.json)"; fi
+    if [ "$WITH_MCP" = 1 ]; then ok "MCP remotos configurados sin sobrescribir entradas existentes"; fi
+    ;;
+  *)
+    MANUAL="la regla de permisos {\"action\":\"skill\",\"resource\":\"ai-brain-starter\",\"effect\":\"deny\"}"
+    if [ "$WITH_MCP" = 1 ]; then
+      MANUAL="$MANUAL y los MCP $(run_python "$LIB/vault_layout.py" mcp-names | tr -d '\r' | paste -sd ',' - | sed 's/,/, /g')"
     fi
-  fi
-fi
+    warn "no se modificó la configuración de OpenCode del vault; agrega a mano $MANUAL"
+    ;;
+esac
 
 if [ "$WITH_OBSIDIAN" = 1 ]; then
   echo "== 13. Obsidian: complementos comunitarios =="

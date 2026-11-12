@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
 
 permissions:
@@ -48,7 +48,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.9"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
       - name: shellcheck
-        run: shellcheck -S warning install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh templates/jobs/*.sh
+        run: shellcheck -S warning install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh templates/jobs/*.sh tests/*.sh tests/lib/*.sh
       - name: Python syntax (3.9, the documented minimum)
         run: python3 -m py_compile scripts/lib/*.py scripts/audit.py
+      - name: Plugin syntax
+        run: node --check plugin/brain-vault/index.js

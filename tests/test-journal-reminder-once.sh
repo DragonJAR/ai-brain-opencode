@@ -15,6 +15,7 @@ JOB="$VAULT/scripts/jobs/journal-reminder.sh"
 CFG="$VAULT/⚙️ Meta/brain-config.json"
 NAME='Vault "Quoted" & Co'
 mkdir -p "$VAULT/scripts/jobs" "$VAULT/⚙️ Meta/logs" "$TMP_ROOT/bin"
+ai_brain_install_vault_libs "$PKG" "$VAULT"
 cp "$PKG/templates/jobs/journal-reminder.sh" "$JOB"
 chmod +x "$JOB"
 cat > "$CFG" <<JSON

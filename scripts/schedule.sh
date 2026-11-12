@@ -14,20 +14,46 @@ fi
 [ -n "$VAULT" ] || { echo "uso: $0 <ruta-del-vault> [--dry-run|--remove|--help]" >&2; exit 1; }
 [ -d "$VAULT" ] || { echo "  ✗ el vault no existe: $VAULT" >&2; exit 1; }
 case "$MODE" in install|--dry-run|--remove) ;; *) echo "  ✗ modo desconocido: $MODE" >&2; exit 2 ;; esac
+
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+[ -f "$LIB/common.sh" ] && [ -f "$LIB/ownership.py" ] && [ -f "$LIB/brain_config.py" ] \
+  || { echo "  ✗ paquete incompleto: faltan archivos en scripts/lib" >&2; exit 1; }
+# shellcheck source=lib/common.sh
+. "$LIB/common.sh"
+pick_python3 || die "falta Python >= 3.9 (python3, py -3 o python)"
+
 VAULT="$(cd "$VAULT" && pwd -P)"
 OS="$(uname -s)"
-SLUG="$(basename "$VAULT" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//')"
-SLUG="${SLUG:-cerebro}"
+SLUG="$(vault_slug "$VAULT")"
 PREFIX="com.ai-brain.$SLUG"
 J="$VAULT/scripts/jobs"
 BRC="$VAULT/⚙️ Meta/brain-config.json"
-MANIFEST="$VAULT/.opencode/brain-vault-install-manifest.json"
-OWNERSHIP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/ownership.py"
+MANIFEST="$VAULT/$BRAIN_MANIFEST_REL"
+AGENTS_DIR="$HOME/Library/LaunchAgents"
 
-say() { printf '%s\n' "$*"; }
-ok() { printf '  + %s\n' "$*"; }
-warn() { printf '  ! %s\n' "$*" >&2; }
-die() { printf '  ✗ %s\n' "$*" >&2; exit 1; }
+# Fuente única de los trabajos: nombre | clave del horario | días.
+# Los días usan el campo día-de-semana de cron (0 = domingo); launchd y schtasks
+# se derivan de aquí, así que un trabajo nuevo es una línea nueva.
+JOB_TABLE='journal-reminder|journal.time|1-5
+insights-weekly|schedule.insights_time|0
+daily-maintenance|schedule.maintenance_time|*
+update-brain|schedule.update_time|1'
+
+case "$OS" in
+  Darwin|Linux) ;;
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *) die "el scheduler soporta macOS, Linux y Windows nativo (Git Bash); plataforma: $OS" ;;
+esac
+
+if [ -L "$VAULT/.opencode" ]; then
+  warn "el .opencode del vault es un symlink; la propiedad de los trabajos es ambigua"
+  [ "$MODE" = "--remove" ] && exit 0
+  exit 1
+fi
+
+owner_manifest() {
+  run_python "$LIB/ownership.py" "$MANIFEST" "$@"
+}
 
 # `launchctl print` falla cuando el agente no está cargado: ese es el caso esperado.
 # `bootout` solo corre después, y un fallo real de descarga queda a la vista.
@@ -39,96 +65,52 @@ bootout_loaded() {
   fi
 }
 
-PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=lib/python3.sh
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/python3.sh"
-pick_python3 || die "falta Python >= 3.9 (python3, py -3 o python)"
-EXAMPLE="$PKG/templates/brain-config.example.json"
-[ -f "$OWNERSHIP" ] || die "paquete incompleto: falta scripts/lib/ownership.py"
-[ -f "$EXAMPLE" ] || die "paquete incompleto: falta templates/brain-config.example.json"
-
-package_default() {
-  $PY3 - "$EXAMPLE" "$1" <<'PY'
-import json, pathlib, sys
-path, dotted = sys.argv[1], sys.argv[2]
-try:
-    cur = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
-except Exception as error:
-    sys.stderr.write("json inválido: %s\n" % error)
-    raise SystemExit(1)
-for key in dotted.split("."):
-    if not isinstance(cur, dict) or key not in cur:
-        sys.stderr.write("falta %s\n" % dotted)
-        raise SystemExit(1)
-    cur = cur[key]
-if not isinstance(cur, str) or not cur.strip():
-    sys.stderr.write("falta %s\n" % dotted)
-    raise SystemExit(1)
-sys.stdout.write(cur.strip())
-PY
-}
-
-default_or_die() {
-  local key value
-  key="$1"
-  if ! value="$(package_default "$key")"; then
-    die "paquete incompleto: templates/brain-config.example.json no declara $key"
-  fi
-  printf '%s' "$value" | grep -Eq '^([01]?[0-9]|2[0-3]):[0-5][0-9]$' \
-    || die "paquete incompleto: $key en templates/brain-config.example.json no es HH:MM"
-  printf '%s' "$value"
-}
-
-WIN=0
-case "$OS" in
-  Darwin|Linux) ;;
-  MINGW*|MSYS*|CYGWIN*) WIN=1 ;;
-  *)
-    die "el scheduler soporta macOS, Linux y Windows nativo (Git Bash); plataforma: $OS" ;;
-esac
-
-if [ -L "$VAULT/.opencode" ]; then
-  warn "el .opencode del vault es un symlink; la propiedad de los trabajos es ambigua"
-  [ "$MODE" = "--remove" ] && exit 0
-  exit 1
-fi
-
-owner_manifest() {
-  $PY3 "$OWNERSHIP" "$MANIFEST" "$@"
-}
-
-cron_value() {
-  $PY3 - "$BRC" "$1" "$2" <<'PY'
-import json, pathlib, sys
-path = pathlib.Path(sys.argv[1])
-default = sys.argv[3]
-if not path.is_file():
-    print(default); sys.exit(0)
-try:
-    cur = json.loads(path.read_text(encoding="utf-8"))
-except Exception:
-    print(default); sys.exit(0)
-for key in sys.argv[2].split("."):
-    if not isinstance(cur, dict) or key not in cur:
-        print(default); sys.exit(0)
-    cur = cur[key]
-print(cur)
-PY
-}
-
-# A schedule value must be HH:MM; anything else falls back to the documented default.
-config_time() {
-  local value="$1" default="$2" label="$3"
-  if printf '%s' "$value" | grep -Eq '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'; then
-    printf '%s' "$value"
+# Retira un launch agent propio y sin cambios, y olvida su registro. Uno
+# modificado se preserva junto con su registro.
+remove_owned_agent() {
+  local agent_path="$1" label="$2"
+  if [ ! -e "$agent_path" ] && [ ! -L "$agent_path" ]; then
+    owner_manifest forget-agent "$agent_path"
+  elif owner_manifest agent-matches "$agent_path" >/dev/null 2>&1; then
+    bootout_loaded "$label"
+    rm -f "$agent_path"
+    owner_manifest forget-agent "$agent_path"
   else
-    warn "$label inválida en brain-config.json ('$value'); se usa $default"
-    printf '%s' "$default"
+    warn "launch agent modificado o no verificado, preservado: $agent_path"
   fi
+}
+
+# for_owned_agents <función>: llama <función> <ruta> <etiqueta> por cada launch
+# agent registrado que vive donde este paquete los escribe.
+for_owned_agents() {
+  local callback="$1" list agent_path label
+  list="$(mktemp "${TMPDIR:-/tmp}/ai-brain-agents.XXXXXX")"
+  owner_manifest agents-tsv > "$list"
+  while IFS=$'\t' read -r agent_path label; do
+    [ -n "$agent_path" ] || continue
+    case "$label" in com.ai-brain.*) ;; *) continue ;; esac
+    [ "$agent_path" = "$AGENTS_DIR/$label.plist" ] || continue
+    "$callback" "$agent_path" "$label"
+  done < "$list"
+  rm -f "$list"
 }
 
 hm() { printf '%s\n' "$1" | cut -d: -f1; }
 pm() { printf '%s\n' "$1" | cut -d: -f2 | sed 's/^0//'; }
+
+# "1-5" -> "1 2 3 4 5"; "0" -> "0"; "*" -> "" (todos los días).
+expand_days() {
+  local spec="$1" part day out=""
+  [ "$spec" = "*" ] && return 0
+  local IFS=','
+  for part in $spec; do
+    case "$part" in
+      *-*) day="${part%-*}"; while [ "$day" -le "${part#*-}" ]; do out="$out $day"; day=$((day + 1)); done ;;
+      *) out="$out $part" ;;
+    esac
+  done
+  printf '%s' "${out# }"
+}
 
 # El plist es XML. &, <, > y las comillas no pueden entrar crudos en el texto.
 xml_escape() {
@@ -140,17 +122,36 @@ xml_escape() {
     -e "s/'/\\&apos;/g"
 }
 
-# Cron reads minute then hour. hm() is HH and pm() is MM; launchd uses them in the other order.
+# launchd y cron arrancan los trabajos con un PATH mínimo, sin opencode ni el
+# Python del usuario. Se conserva el PATH de quien programa, saneado.
+schedule_path() {
+  local out="" dir
+  local IFS=':'
+  set -f
+  for dir in $PATH /usr/local/bin /usr/bin /bin /usr/sbin /sbin; do
+    case "$dir" in /*) ;; *) continue ;; esac
+    case "$dir" in *"'"*|*'"'*|*%*|*'&'*|*'<'*|*'>'*|*'\'*|*$'\n'*) continue ;; esac
+    [ -d "$dir" ] || continue
+    case ":$out:" in *":$dir:"*) continue ;; esac
+    out="${out:+$out:}$dir"
+  done
+  set +f
+  printf '%s' "$out"
+}
+
+# Cron lee minuto y luego hora. `%` es salto de línea para cron: se escapa.
 write_cron_lines() {
-  local marker="$1"
-  printf '%s %s * * 1-5 /bin/bash "%s/journal-reminder.sh" %s\n' "$(pm "$JT")" "$(hm "$JT")" "$J" "$marker"
-  printf '%s %s * * 0 /bin/bash "%s/insights-weekly.sh" %s\n' "$(pm "$ITIME")" "$(hm "$ITIME")" "$J" "$marker"
-  printf '%s %s * * * /bin/bash "%s/daily-maintenance.sh" %s\n' "$(pm "$MTIME")" "$(hm "$MTIME")" "$J" "$marker"
-  printf '%s %s * * 1 /bin/bash "%s/update-brain.sh" %s\n' "$(pm "$UTIME")" "$(hm "$UTIME")" "$J" "$marker"
+  local marker="$1" index=0 jobs_dir="${J//%/\\%}"
+  while [ "$index" -lt "${#JOB_NAMES[@]}" ]; do
+    printf "%s %s * * %s PATH='%s' /bin/bash \"%s/%s.sh\" %s\n" \
+      "$(pm "${JOB_TIMES[$index]}")" "$(hm "${JOB_TIMES[$index]}")" "${JOB_DAYS[$index]}" \
+      "$SCHEDULE_PATH" "$jobs_dir" "${JOB_NAMES[$index]}" "$marker"
+    index=$((index + 1))
+  done
 }
 
 reconcile_crontab() {
-  $PY3 - "$1" "$2" "$3" "$4" <<'PY'
+  run_python - "$1" "$2" "$3" "$4" <<'PY'
 import json, pathlib, sys
 current_path, generated_path, output_path = map(pathlib.Path, sys.argv[1:4])
 previous = json.loads(sys.argv[4])
@@ -166,7 +167,8 @@ for line in generated_path.read_text(encoding="utf-8").splitlines(keepends=True)
     if not any(existing.rstrip("\r\n") == value for existing in current):
         current.append(line)
         owned.append(value)
-output_path.write_text("".join(current), encoding="utf-8")
+output_path.write_text("".join(current), encoding="utf-8", newline="")
+sys.stdout.reconfigure(encoding="utf-8", newline="\n")
 print(json.dumps(owned, ensure_ascii=False, separators=(",", ":")))
 PY
 }
@@ -190,6 +192,40 @@ read_crontab() {
   return "$rc"
 }
 
+# --- Windows (schtasks) --------------------------------------------------------
+
+# Git Bash convierte en rutas los argumentos que empiezan por "/" (/Create,
+# /TN...). schtasks necesita recibirlos tal cual.
+schtasks_native() {
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' schtasks "$@"
+}
+
+# Nombres de las tareas existentes, uno por línea.
+windows_task_names() {
+  local csv
+  csv="$(schtasks_native /Query /FO CSV /NH 2>/dev/null)" || return 1
+  # El CSV de schtasks es citado: los nombres de tarea pueden contener comas.
+  printf '%s\n' "$csv" | run_python -c 'import csv, io, sys
+sys.stdout.reconfigure(encoding="utf-8", newline="\n")
+for row in csv.reader(io.StringIO(sys.stdin.read())):
+    if row and row[0].strip():
+        print(row[0].strip().lstrip("\\"))
+'
+}
+
+json_lines() {
+  printf '%s\n' "$1" | run_python -c 'import json, sys
+sys.stdout.reconfigure(encoding="utf-8", newline="\n")
+for name in json.load(sys.stdin):
+    print(name)'
+}
+
+lines_json() {
+  run_python -c 'import json, sys
+sys.stdout.reconfigure(encoding="utf-8", newline="\n")
+print(json.dumps([line for line in sys.stdin.read().splitlines() if line], ensure_ascii=False))'
+}
+
 sch_st() {
   local h m
   h="${1%%:*}"
@@ -197,30 +233,45 @@ sch_st() {
   printf '%02d:%02d' "$((10#$h))" "$((10#$m))"
 }
 
+# "1 2 3 4 5" -> "MON,TUE,WED,THU,FRI"
+windows_days() {
+  local names="SUN MON TUE WED THU FRI SAT" day out="" name
+  for day in $1; do
+    # shellcheck disable=SC2086
+    set -- $names
+    shift "$day"
+    name="$1"
+    out="${out:+$out,}$name"
+  done
+  printf '%s' "$out"
+}
+
 write_windows_runner() {
-  local dest="$1"
-  mkdir -p "$(dirname "$dest")"
-  # where bash, y si no está en PATH las rutas del instalador de Git for Windows.
+  local dest="$1" git_root
+  # El bash que programa es el de Git for Windows: su wrapper bin\bash.exe va
+  # primero. `where bash` queda al final: en muchos equipos resuelve antes al
+  # lanzador de WSL (System32\bash.exe), que no puede correr estos trabajos.
+  git_root="$(cygpath -w / 2>/dev/null || true)"
+  git_root="${git_root%\\}"
   # La línea bash "%~dp0%JOB%.sh" queda: es el contrato que afirma el test.
   printf '%s\r\n' \
     '@echo off' \
     'set "JOB=%~1"' \
     'if "%JOB%"=="" exit /b 2' \
-    'where bash >nul 2>&1 && goto :run_path' \
+    "set \"BRAIN_BASH=${git_root}\\bin\\bash.exe\"" \
+    'if exist "%BRAIN_BASH%" goto :run_known' \
     'if exist "%ProgramFiles%\Git\bin\bash.exe" goto :run_pf' \
-    'if exist "%ProgramFiles%\Git\usr\bin\bash.exe" goto :run_usr' \
     'if exist "%ProgramFiles(x86)%\Git\bin\bash.exe" goto :run_x86' \
     'if exist "%LocalAppData%\Programs\Git\bin\bash.exe" goto :run_local' \
+    'if exist "%ProgramFiles%\Git\usr\bin\bash.exe" goto :run_usr' \
+    'where bash >nul 2>&1 && goto :run_path' \
     'echo No se encontro bash. Instala Git for Windows o agregalo al PATH. 1>&2' \
     'exit /b 127' \
-    ':run_path' \
-    'bash "%~dp0%JOB%.sh"' \
+    ':run_known' \
+    '"%BRAIN_BASH%" "%~dp0%JOB%.sh"' \
     'exit /b %ERRORLEVEL%' \
     ':run_pf' \
     '"%ProgramFiles%\Git\bin\bash.exe" "%~dp0%JOB%.sh"' \
-    'exit /b %ERRORLEVEL%' \
-    ':run_usr' \
-    '"%ProgramFiles%\Git\usr\bin\bash.exe" "%~dp0%JOB%.sh"' \
     'exit /b %ERRORLEVEL%' \
     ':run_x86' \
     '"%ProgramFiles(x86)%\Git\bin\bash.exe" "%~dp0%JOB%.sh"' \
@@ -228,103 +279,95 @@ write_windows_runner() {
     ':run_local' \
     '"%LocalAppData%\Programs\Git\bin\bash.exe" "%~dp0%JOB%.sh"' \
     'exit /b %ERRORLEVEL%' \
+    ':run_usr' \
+    '"%ProgramFiles%\Git\usr\bin\bash.exe" "%~dp0%JOB%.sh"' \
+    'exit /b %ERRORLEVEL%' \
+    ':run_path' \
+    'bash "%~dp0%JOB%.sh"' \
+    'exit /b %ERRORLEVEL%' \
     > "$dest"
 }
 
-# Tareas propias: los nombres se registran en el manifiesto (cron_lines) ANTES
-# de crearlas, para que --remove borre solo lo verificado con la misma garantía
-# que en POSIX.
-TASK_FAILED=0
-
-windows_task() {
-  local job="$1" sc="$2" days="$3" when="$4" tn tr
-  tn="ai-brain ${SLUG} ${job}"
-  tr="\"${WIN_RUNNER}\" ${job}"
-  if [ "$MODE" = "--dry-run" ]; then
-    if [ -n "$days" ]; then
-      printf 'schtasks /Create /F /TN "%s" /SC %s /D %s /ST %s /TR %s\n' "$tn" "$sc" "$days" "$when" "$tr"
-    else
-      printf 'schtasks /Create /F /TN "%s" /SC %s /ST %s /TR %s\n' "$tn" "$sc" "$when" "$tr"
-    fi
-    return 0
-  fi
-  local created=0
-  if [ -n "$days" ]; then
-    schtasks /Create /F /TN "$tn" /SC "$sc" /D "$days" /ST "$when" /TR "$tr" && created=1
-  else
-    schtasks /Create /F /TN "$tn" /SC "$sc" /ST "$when" /TR "$tr" && created=1
-  fi
-  if [ "$created" = 1 ]; then
-    ok "$tn"
-  else
-    warn "no se pudo crear la tarea $tn"
-    TASK_FAILED=1
-  fi
-}
-
 windows_schedule() {
-  local runner="$J/ai-brain-run.cmd"
+  local runner="$J/ai-brain-run.cmd" win_runner index=0 tn days sc when existing previous staged wanted=""
   command -v cygpath >/dev/null 2>&1 || die "falta cygpath (lo requiere schtasks)"
-  WIN_RUNNER="$(cygpath -w "$runner")"
+  win_runner="$(cygpath -w "$runner")"
   if [ "$MODE" != "--dry-run" ]; then
     command -v schtasks >/dev/null 2>&1 || die "falta schtasks"
-    write_windows_runner "$runner"
     owner_manifest init || die "manifiesto de propiedad inválido; no se cambió la programación"
-    owner_manifest record-file "scripts/jobs/ai-brain-run.cmd" "$runner" \
-      || warn "no se pudo registrar scripts/jobs/ai-brain-run.cmd"
-    # Los nombres son deterministas: se registran ANTES de crear para que una
-    # falla a medias nunca deje tareas instaladas sin dueño.
-    owner_manifest set-cron "[\"ai-brain ${SLUG} journal-reminder\", \"ai-brain ${SLUG} insights-weekly\", \"ai-brain ${SLUG} daily-maintenance\", \"ai-brain ${SLUG} update-brain\"]" \
-      || die "no se pudo registrar la propiedad de las tareas; bórralas a mano con schtasks /Delete"
+    staged="$(mktemp "${TMPDIR:-/tmp}/ai-brain-run.XXXXXX")"
+    write_windows_runner "$staged"
+    owner_manifest install-files "$VAULT" "scripts/jobs/ai-brain-run.cmd" "$staged" - >/dev/null \
+      || { rm -f "$staged"; die "no se pudo instalar scripts/jobs/ai-brain-run.cmd"; }
+    rm -f "$staged"
+    existing="$(windows_task_names)" || die "no se pudo listar las tareas programadas; no se cambió la programación"
+    previous="$(json_lines "$(owner_manifest cron-json)")"
+    # Una tarea con el mismo nombre que no es de este vault (otro vault con el
+    # mismo nombre de carpeta) no se pisa: /Create /F la reemplazaría.
+    while [ "$index" -lt "${#JOB_NAMES[@]}" ]; do
+      tn="ai-brain ${SLUG} ${JOB_NAMES[$index]}"
+      if printf '%s\n' "$existing" | grep -qxF "$tn" && ! printf '%s\n' "$previous" | grep -qxF "$tn"; then
+        warn "ya existe una tarea ajena llamada '$tn' (¿otro vault con el mismo nombre de carpeta?); se preservó"
+        SCHEDULE_FAILED=1
+      else
+        wanted="${wanted}${tn}"$'\n'
+      fi
+      index=$((index + 1))
+    done
+    # Los nombres se registran ANTES de crear: una falla a medias nunca deja
+    # tareas instaladas sin dueño.
+    owner_manifest set-cron "$(printf '%s' "$wanted" | lines_json)" \
+      || die "no se pudo registrar la propiedad de las tareas; no se cambió la programación"
   fi
-  windows_task journal-reminder WEEKLY "MON,TUE,WED,THU,FRI" "$(sch_st "$JT")"
-  windows_task insights-weekly WEEKLY "SUN" "$(sch_st "$ITIME")"
-  windows_task daily-maintenance DAILY "" "$(sch_st "$MTIME")"
-  windows_task update-brain WEEKLY "MON" "$(sch_st "$UTIME")"
-  if [ "$MODE" != "--dry-run" ] && [ "$TASK_FAILED" != 0 ]; then
-    die "no se pudieron crear todas las tareas de Windows; revisa el output de schtasks"
-  fi
+  index=0
+  while [ "$index" -lt "${#JOB_NAMES[@]}" ]; do
+    tn="ai-brain ${SLUG} ${JOB_NAMES[$index]}"
+    days="$(windows_days "$(expand_days "${JOB_DAYS[$index]}")")"
+    when="$(sch_st "${JOB_TIMES[$index]}")"
+    sc=WEEKLY
+    [ -n "$days" ] || sc=DAILY
+    set -- /Create /F /TN "$tn" /SC "$sc" ${days:+/D "$days"} /ST "$when" /TR "\"$win_runner\" ${JOB_NAMES[$index]}"
+    if [ "$MODE" = "--dry-run" ]; then
+      printf 'schtasks /Create /F /TN "%s" /SC %s%s /ST %s /TR "%s" %s\n' \
+        "$tn" "$sc" "${days:+ /D $days}" "$when" "$win_runner" "${JOB_NAMES[$index]}"
+    elif ! printf '%s' "$wanted" | grep -qxF "$tn"; then
+      :
+    elif schtasks_native "$@"; then
+      ok "$tn"
+    else
+      warn "no se pudo crear la tarea $tn"
+      SCHEDULE_FAILED=1
+    fi
+    index=$((index + 1))
+  done
 }
 
-windows_schtasks_remove() {
-  local owned_json="$1" csv name bare names owned removed
+windows_remove() {
+  local owned_json="$1" names owned name removed=0
   command -v schtasks >/dev/null 2>&1 || die "falta schtasks"
-  csv="$(schtasks /Query /FO CSV /NH 2>/dev/null)" || die "no se pudo listar las tareas programadas"
-  names="$(mktemp "${TMPDIR:-/tmp}/ai-brain-schtasks-names.XXXXXX")"
-  owned="$(mktemp "${TMPDIR:-/tmp}/ai-brain-schtasks-owned.XXXXXX")"
-  printf '%s\n' "$owned_json" | $PY3 -c 'import json, sys
-for name in json.load(sys.stdin):
-    print(name)' > "$owned"
-  # El CSV de schtasks es citado: los nombres de tarea pueden contener comas.
-  printf '%s\n' "$csv" | $PY3 -c 'import csv, io, sys
-for row in csv.reader(io.StringIO(sys.stdin.read())):
-    if row and row[0].strip():
-        print(row[0].strip().lstrip("\\"))
-' > "$names"
-  removed=0
+  names="$(windows_task_names)" || die "no se pudo listar las tareas programadas"
+  owned="$(json_lines "$owned_json")"
   while IFS= read -r name; do
     [ -n "$name" ] || continue
-    grep -qxF "$name" "$names" || continue
-    if ! schtasks /Delete /F /TN "$name"; then
-      warn "no se pudo borrar la tarea $name"
-      rm -f "$names" "$owned"
-      exit 1
-    fi
+    printf '%s\n' "$names" | grep -qxF "$name" || continue
+    schtasks_native /Delete /F /TN "$name" || die "no se pudo borrar la tarea $name"
     ok "tarea eliminada: $name"
     removed=$((removed + 1))
-  done < "$owned"
-  while IFS= read -r bare; do
-    [ -n "$bare" ] || continue
-    case "$bare" in
-      "ai-brain "*)
-        grep -qxF "$bare" "$owned" || warn "tarea ajena preservada: $bare"
-        ;;
+  done <<EOF
+$owned
+EOF
+  while IFS= read -r name; do
+    case "$name" in
+      "ai-brain "*) printf '%s\n' "$owned" | grep -qxF "$name" || warn "tarea ajena preservada: $name" ;;
     esac
-  done < "$names"
-  rm -f "$names" "$owned"
+  done <<EOF
+$names
+EOF
   owner_manifest clear-cron
   [ "$removed" -gt 0 ] || say "No hay tareas de Windows registradas del paquete para eliminar."
 }
+
+# --- Eliminación -----------------------------------------------------------------
 
 if [ "$MODE" = "--remove" ]; then
   if CRON_JSON="$(owner_manifest cron-json 2>/dev/null)"; then
@@ -338,33 +381,17 @@ if [ "$MODE" = "--remove" ]; then
     warn "manifiesto de propiedad ausente o inválido; se preservaron los artefactos programados"
     exit 0
   fi
-  if [ "$WIN" = 1 ]; then
-    windows_schtasks_remove "$CRON_JSON"
-    exit 0
-  fi
-  if [ "$OS" = "Darwin" ]; then
-    AGENT_LIST="$(mktemp "${TMPDIR:-/tmp}/ai-brain-agents.XXXXXX")"
-    trap 'rm -f "$AGENT_LIST"' EXIT
-    owner_manifest agents-tsv > "$AGENT_LIST"
-    while IFS=$'\t' read -r agent_path label; do
-      [ -n "$agent_path" ] || continue
-      case "$label" in "$PREFIX".*) ;; *) continue ;; esac
-      [ "$agent_path" = "$HOME/Library/LaunchAgents/$label.plist" ] || continue
-      if owner_manifest agent-matches "$agent_path" >/dev/null 2>&1; then
-        bootout_loaded "$label"
-        rm -f "$agent_path"
-      else
-        warn "launch agent modificado o no verificado, preservado: $agent_path"
-      fi
-    done < "$AGENT_LIST"
-    owner_manifest clear-agents
+  if is_windows; then
+    windows_remove "$CRON_JSON"
+  elif [ "$OS" = "Darwin" ]; then
+    for_owned_agents remove_owned_agent
   elif [ "$CRON_JSON" != "[]" ]; then
     CURRENT="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-current.XXXXXX")"
     GENERATED="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-empty.XXXXXX")"
     UPDATED="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-updated.XXXXXX")"
     trap 'rm -f "$CURRENT" "$GENERATED" "$UPDATED"' EXIT
     read_crontab "$CURRENT" || { warn "no se pudo leer el crontab; se preservaron los registros de propiedad"; exit 1; }
-    OWNED="$(reconcile_crontab "$CURRENT" "$GENERATED" "$UPDATED" "$CRON_JSON")"
+    reconcile_crontab "$CURRENT" "$GENERATED" "$UPDATED" "$CRON_JSON" >/dev/null
     if ! cmp -s "$CURRENT" "$UPDATED"; then crontab "$UPDATED"; fi
     owner_manifest clear-cron
   else
@@ -373,17 +400,29 @@ if [ "$MODE" = "--remove" ]; then
   exit 0
 fi
 
-JT_DEFAULT="$(default_or_die journal.time)" || exit 1
-IT_DEFAULT="$(default_or_die schedule.insights_time)" || exit 1
-MT_DEFAULT="$(default_or_die schedule.maintenance_time)" || exit 1
-UT_DEFAULT="$(default_or_die schedule.update_time)" || exit 1
-JT="$(config_time "$(cron_value 'journal.time' "$JT_DEFAULT")" "$JT_DEFAULT" 'journal.time')"
-ITIME="$(config_time "$(cron_value 'schedule.insights_time' "$IT_DEFAULT")" "$IT_DEFAULT" 'schedule.insights_time')"
-MTIME="$(config_time "$(cron_value 'schedule.maintenance_time' "$MT_DEFAULT")" "$MT_DEFAULT" 'schedule.maintenance_time')"
-UTIME="$(config_time "$(cron_value 'schedule.update_time' "$UT_DEFAULT")" "$UT_DEFAULT" 'schedule.update_time')"
+# --- Instalación y dry-run -------------------------------------------------------
 
-if [ "$WIN" = 1 ]; then
+JOB_NAMES=() JOB_KEYS=() JOB_DAYS=() JOB_TIMES=()
+while IFS='|' read -r job_name job_key job_days; do
+  JOB_NAMES+=("$job_name")
+  JOB_KEYS+=("$job_key")
+  JOB_DAYS+=("$job_days")
+done <<EOF
+$JOB_TABLE
+EOF
+# Una sola lectura de la config: valida HH:MM y cae al valor por defecto con aviso.
+TIMES="$(brain_config "$BRC" get "${JOB_KEYS[@]}")" || die "no se pudieron resolver los horarios de los trabajos"
+while IFS= read -r job_time; do JOB_TIMES+=("$job_time"); done <<EOF
+$TIMES
+EOF
+[ "${#JOB_TIMES[@]}" -eq "${#JOB_NAMES[@]}" ] || die "no se pudieron resolver los horarios de los trabajos"
+
+SCHEDULE_FAILED=0
+SCHEDULE_PATH="$(schedule_path)"
+
+if is_windows; then
   windows_schedule
+  [ "$SCHEDULE_FAILED" = 0 ] || die "no se pudieron crear todas las tareas de Windows; revisa la salida de schtasks"
   exit 0
 fi
 
@@ -392,44 +431,50 @@ if [ "$MODE" = "--dry-run" ] && [ "$OS" != "Darwin" ]; then
   exit 0
 fi
 
-if [ "$MODE" = "--dry-run" ]; then
-  INSTANCE="dry-run"
-else
-  owner_manifest init || { echo "  ✗ manifiesto de propiedad inválido; no se cambió la programación" >&2; exit 1; }
-  INSTANCE="$(owner_manifest instance)"
+if [ "$MODE" != "--dry-run" ]; then
+  owner_manifest init || die "manifiesto de propiedad inválido; no se cambió la programación"
 fi
 
 if [ "$OS" = "Darwin" ]; then
-  mk() {
-    local job="$1" label="$2" cal="$3" plist=""
-    local xml_label xml_program xml_log
-    xml_label="$(xml_escape "$label")"
-    xml_program="$(xml_escape "$J/$job.sh")"
-    xml_log="$(xml_escape "$VAULT/⚙️ Meta/logs/$job.log")"
+  launchd_calendar() {
+    local time="$1" days="$2" day entry="" count=0
+    for day in ${days:-all}; do
+      entry="$entry<dict><key>Hour</key><integer>$((10#$(hm "$time")))</integer><key>Minute</key><integer>$((10#$(printf '%s' "$time" | cut -d: -f2)))</integer>"
+      [ "$day" = all ] || entry="$entry<key>Weekday</key><integer>$day</integer>"
+      entry="$entry</dict>"
+      count=$((count + 1))
+    done
+    if [ "$count" -gt 1 ]; then entry="<array>$entry</array>"; fi
+    printf '<key>StartCalendarInterval</key>%s' "$entry"
+  }
+
+  install_agent() {
+    local job="$1" time="$2" days="$3" label="$PREFIX.$1" plist
     if [ "$MODE" = "--dry-run" ]; then
       plist="$(mktemp "${TMPDIR:-/tmp}/ai-brain-${label}.XXXXXX")"
     else
-      plist="$HOME/Library/LaunchAgents/$label.plist"
-      if [ -L "$plist" ]; then warn "launch agent symlink preservado: $plist"; return 0; fi
+      plist="$AGENTS_DIR/$label.plist"
+      if [ -L "$plist" ]; then warn "launch agent symlink preservado: $plist"; return 1; fi
       if [ -e "$plist" ] && ! owner_manifest agent-matches "$plist" >/dev/null 2>&1; then
-        warn "launch agent sin propiedad o modificado, preservado: $plist"
-        return 0
+        warn "launch agent ajeno o modificado, preservado: $plist (¿otro vault con el mismo nombre de carpeta?)"
+        return 1
       fi
-      mkdir -p "$HOME/Library/LaunchAgents"
+      mkdir -p "$AGENTS_DIR"
     fi
     cat > "$plist" <<PL
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>Label</key><string>$xml_label</string>
-<key>ProgramArguments</key><array><string>/bin/bash</string><string>$xml_program</string></array>
-$cal
-<key>StandardOutPath</key><string>$xml_log</string>
-<key>StandardErrorPath</key><string>$xml_log</string>
+<key>Label</key><string>$(xml_escape "$label")</string>
+<key>ProgramArguments</key><array><string>/bin/bash</string><string>$(xml_escape "$J/$job.sh")</string></array>
+<key>EnvironmentVariables</key><dict><key>PATH</key><string>$(xml_escape "$SCHEDULE_PATH")</string></dict>
+$(launchd_calendar "$time" "$(expand_days "$days")")
+<key>StandardOutPath</key><string>$(xml_escape "$VAULT/⚙️ Meta/logs/$job.log")</string>
+<key>StandardErrorPath</key><string>$(xml_escape "$VAULT/⚙️ Meta/logs/$job.log")</string>
 </dict></plist>
 PL
     if ! plutil -lint "$plist" >/dev/null 2>&1; then
-      echo "  ✗ plist inválido: $label" >&2
+      warn "plist inválido: $label"
       rm -f "$plist"
       return 1
     fi
@@ -442,21 +487,32 @@ PL
     if ! owner_manifest record-agent "$plist" "$label"; then
       rm -f "$plist"   # sin registro no hay dueño: mejor no dejar el huérfano
       warn "no se pudo registrar el launch agent: $plist"
-      return 0
+      return 1
     fi
     bootout_loaded "$label"
-    launchctl bootstrap "gui/$(id -u)" "$plist" && ok "$label" || echo "  ! $label (falló el bootstrap)"
+    if launchctl bootstrap "gui/$(id -u)" "$plist"; then ok "$label"; else warn "$label (falló el bootstrap)"; return 1; fi
   }
-  CAL_J="<key>StartCalendarInterval</key><array>$(for wd in 1 2 3 4 5; do printf '<dict><key>Hour</key><integer>%s</integer><key>Minute</key><integer>%s</integer><key>Weekday</key><integer>%s</integer></dict>' "$(hm "$JT")" "$(pm "$JT")" "$wd"; done)</array>"
-  CAL_I="<key>StartCalendarInterval</key><dict><key>Hour</key><integer>$(hm "$ITIME")</integer><key>Minute</key><integer>$(pm "$ITIME")</integer><key>Weekday</key><integer>0</integer></dict>"
-  CAL_M="<key>StartCalendarInterval</key><dict><key>Hour</key><integer>$(hm "$MTIME")</integer><key>Minute</key><integer>$(pm "$MTIME")</integer></dict>"
-  CAL_U="<key>StartCalendarInterval</key><dict><key>Hour</key><integer>$(hm "$UTIME")</integer><key>Minute</key><integer>$(pm "$UTIME")</integer><key>Weekday</key><integer>1</integer></dict>"
-  mk journal-reminder "$PREFIX.journal-reminder" "$CAL_J" || warn "launch agent omitido: $PREFIX.journal-reminder"
-  mk insights-weekly "$PREFIX.insights-weekly" "$CAL_I" || warn "launch agent omitido: $PREFIX.insights-weekly"
-  mk daily-maintenance "$PREFIX.daily-maintenance" "$CAL_M" || warn "launch agent omitido: $PREFIX.daily-maintenance"
-  mk update-brain-weekly "$PREFIX.update-brain-weekly" "$CAL_U" || warn "launch agent omitido: $PREFIX.update-brain-weekly"
+
+  # Un agente propio cuyo trabajo ya no está en la tabla (renombrado o retirado)
+  # se va: de lo contrario seguiría disparando un script que no existe.
+  retire_stale_agent() {
+    local agent_path="$1" label="$2" index=0
+    while [ "$index" -lt "${#JOB_NAMES[@]}" ]; do
+      [ "$label" = "$PREFIX.${JOB_NAMES[$index]}" ] && return 0
+      index=$((index + 1))
+    done
+    remove_owned_agent "$agent_path" "$label"
+  }
+  [ "$MODE" = "--dry-run" ] || for_owned_agents retire_stale_agent
+
+  index=0
+  while [ "$index" -lt "${#JOB_NAMES[@]}" ]; do
+    install_agent "${JOB_NAMES[$index]}" "${JOB_TIMES[$index]}" "${JOB_DAYS[$index]}" || SCHEDULE_FAILED=1
+    index=$((index + 1))
+  done
+  [ "$SCHEDULE_FAILED" = 0 ] || die "no se pudieron instalar todos los launch agents; revisa los avisos"
 else
-  MARK="# ai-brain $SLUG owner=$INSTANCE"
+  MARK="# ai-brain $SLUG owner=$(owner_manifest instance)"
   GENERATED="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-new.XXXXXX")"
   CURRENT="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-current.XXXXXX")"
   UPDATED="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-updated.XXXXXX")"
@@ -471,7 +527,7 @@ else
     || { warn "no se pudo registrar la propiedad de las líneas; no se cambió el crontab"; exit 1; }
   if ! cmp -s "$CURRENT" "$UPDATED"; then
     crontab "$UPDATED"
-    ok "4 entradas de cron propias ($MARK)"
+    ok "${#JOB_NAMES[@]} entradas de cron propias ($MARK)"
   else
     ok "las entradas de cron propias ya están al día"
   fi

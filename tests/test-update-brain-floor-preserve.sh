@@ -15,6 +15,7 @@ STARTER="$VAULT/.opencode/skills/ai-brain-starter"
 mkdir -p "$VAULT/scripts/jobs" "$VAULT/⚙️ Meta/Floors" "$VAULT/⚙️ Meta/logs" \
   "$STARTER/floors" "$STARTER/scripts"
 
+ai_brain_install_vault_libs "$PKG" "$VAULT"
 cp "$PKG/templates/jobs/update-brain.sh" "$VAULT/scripts/jobs/update-brain.sh"
 chmod +x "$VAULT/scripts/jobs/update-brain.sh"
 

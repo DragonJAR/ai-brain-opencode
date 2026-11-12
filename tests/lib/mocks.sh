@@ -7,6 +7,15 @@ ai_brain_test_root() {
   mktemp -d "${TMPDIR:-/tmp}/ai-brain-$1.XXXXXX"
 }
 
+# A scheduled job needs the vault-side libraries install.sh copies next to it.
+# Usage: ai_brain_install_vault_libs <package-root> <vault>
+ai_brain_install_vault_libs() {
+  local pkg="$1" vault="$2"
+  mkdir -p "$vault/scripts/lib" "$vault/scripts/jobs"
+  cp "$pkg"/scripts/lib/*.sh "$pkg"/scripts/lib/*.py "$vault/scripts/lib/"
+  cp "$pkg/templates/brain-config.example.json" "$vault/scripts/lib/brain-config.defaults.json"
+}
+
 # HH:MM -> "MM HH": cron fields are minute-then-hour, launchd hour-then-minute.
 # Mirrors pm()/hm() in schedule.sh: the minute drops one leading zero.
 cron_minute_hour() {
@@ -88,6 +97,8 @@ SH
 #!/bin/sh
 # Log schtasks invocations; /Query returns MOCK_SCHTASKS_STATE when set.
 printf '%s\n' "$*" >> "${MOCK_SCHTASKS_CALLS:-/dev/null}"
+# Git Bash rewrites "/Create" into a path unless the caller disables it.
+printf '%s\n' "${MSYS_NO_PATHCONV:-unset}" >> "${MOCK_SCHTASKS_ENV:-/dev/null}"
 case " $* " in
   *" /Query "*)
     [ -f "${MOCK_SCHTASKS_STATE:-}" ] && cat "${MOCK_SCHTASKS_STATE:-}"

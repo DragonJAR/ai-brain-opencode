@@ -17,6 +17,11 @@ PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BAD=0
 STRUCT_RE="/Users/[A-Za-z0-9._-]+|/(home|Users)/[A-Za-z0-9._-]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}"
 
+# Lo que no se distribuye o es el propio detector: una sola lista para los tres chequeos.
+EXCLUDES=(--exclude-dir=.git --exclude-dir=.codegraph --exclude-dir=node_modules
+          --exclude-dir=.atl --exclude-dir=odd --exclude-dir=__pycache__
+          --exclude=check-personal-data.sh)
+
 die() { printf '  ✗ %s\n' "$*" >&2; exit 1; }
 [ -d "$PKG" ] || die "no existe el directorio a revisar: $PKG"
 
@@ -64,9 +69,7 @@ readme_attribution() {
 
 echo "== Chequeo estructural =="
 STRUCT="$(grep_in_pkg -rnE "$STRUCT_RE" . \
-  --exclude-dir=.git --exclude-dir=.codegraph --exclude-dir=node_modules \
-  --exclude-dir=.atl --exclude-dir=odd --exclude-dir=__pycache__ \
-  --exclude=check-personal-data.sh)"
+"${EXCLUDES[@]}")"
 rc=$?
 if [ "$rc" -ge 2 ]; then
   die "el chequeo estructural no pudo correr (grep salió $rc)"
@@ -87,9 +90,7 @@ echo "== Marcadores prohibidos =="
 # El patrón usa [C] para que el propio detector no contenga el literal que prohíbe.
 FORBIDDEN_RE='Segundo[C]erebro|Segundo[ ]Cerebro'
 FORBIDDEN="$(grep_in_pkg -rnE "$FORBIDDEN_RE" . \
-  --exclude-dir=.git --exclude-dir=.codegraph --exclude-dir=node_modules \
-  --exclude-dir=.atl --exclude-dir=odd --exclude-dir=__pycache__ \
-  --exclude=check-personal-data.sh)"
+"${EXCLUDES[@]}")"
 rc=$?
 if [ "$rc" -ge 2 ]; then
   die "el chequeo de marcadores no pudo correr (grep salió $rc)"
@@ -108,9 +109,7 @@ if [ -s "$TERMS_FILE" ]; then
   # LICENSE se excluye: atribución del autor, no dato del operador.
   # odd/ y .atl/ no son archivos de producto.
   RAW="$(grep_in_pkg -rniE -f "$TERMS_FILE" . \
-    --exclude-dir=.git --exclude-dir=.codegraph --exclude-dir=node_modules \
-    --exclude-dir=.atl --exclude-dir=odd --exclude-dir=__pycache__ \
-    --exclude=check-personal-data.sh --exclude=LICENSE)"
+"${EXCLUDES[@]}" --exclude=LICENSE)"
   rc=$?
   if [ "$rc" -ge 2 ]; then
     die "el chequeo de nombres no pudo correr (grep salió $rc)"

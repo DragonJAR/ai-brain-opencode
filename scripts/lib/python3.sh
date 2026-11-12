@@ -25,6 +25,7 @@ pick_python3() {
   else
     return 1
   fi
-  export PY3
+  # Modo UTF-8: en Windows el intérprete usaría cp1252 para la E/S y para open().
+  export PY3 PYTHONUTF8=1
   return 0
 }

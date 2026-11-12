@@ -47,7 +47,7 @@ if [ ! -d "$VAULT/📝 Notes/Raw" ] || [ ! -f "$VAULT/📝 Notes/Raw/.gitkeep" ]
 fi
 
 # 3. Assert package commands exist in .opencode/commands
-for cmd in ingest audit today ideas create; do
+for cmd in ingest audit today ideas create journal setup-brain; do
   if [ ! -f "$VAULT/.opencode/commands/$cmd.md" ]; then
     printf 'FAIL: command .opencode/commands/%s.md missing\n' "$cmd" >&2
     exit 1
@@ -133,7 +133,7 @@ if [ -f "$VAULT/scripts/audit.py" ]; then
   exit 1
 fi
 
-for cmd in ingest audit today ideas create; do
+for cmd in ingest audit today ideas create journal setup-brain; do
   if [ -f "$VAULT/.opencode/commands/$cmd.md" ]; then
     printf 'FAIL: uninstall did not remove .opencode/commands/%s.md\n' "$cmd" >&2
     exit 1

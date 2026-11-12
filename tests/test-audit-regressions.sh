@@ -66,10 +66,11 @@ fi
 ! grep -Fq 'directorio padre symlink' "$TMP_ROOT/install-2.txt" || fail "re-install printed the false 'directorio padre symlink' warning"
 [ -L "$VAULT/CLAUDE.md" ] || fail "CLAUDE.md is not the managed symlink"
 
-# 3. The texts name a command that exists (/daily-journal, never /journal).
-if grep -REn '(^|[^-/a-z])/journal\b' "$PKG/install.sh" "$PKG/templates" >/dev/null; then
-  fail "a product text still points at the non-existent /journal command"
-fi
+# 3. The commands the product and the vendor skills tell the user to type exist
+#    in the installed vault: /journal and /setup-brain were named but never wired.
+[ -f "$VAULT/.opencode/commands/journal.md" ] && [ -f "$VAULT/.opencode/commands/setup-brain.md" ] \
+  || fail "the package did not install /journal and /setup-brain"
+grep -Fq '/setup-brain' "$PKG/install.sh" || fail "the installer does not point the user at /setup-brain"
 
 # 4. Every scheduled job in the table has its script, on every backend. The
 #    macOS agent used to point at update-brain-weekly.sh, which never existed.

@@ -68,8 +68,8 @@ if ! bash "$PKG/install.sh" "$VAULT" --with-mcp > "$TMP_ROOT/install-1.txt" 2>&1
   cat "$TMP_ROOT/install-1.txt" >&2
 fi
 if "$REAL_GIT" -C "$VAULT" rev-parse -q --verify HEAD >/dev/null; then
-  TREE="$("$REAL_GIT" -C "$VAULT" ls-tree -r HEAD)"
-  NAMES="$("$REAL_GIT" -C "$VAULT" ls-tree -r --name-only HEAD)"
+  TREE="$("$REAL_GIT" -C "$VAULT" -c core.quotePath=false ls-tree -r HEAD)"
+  NAMES="$("$REAL_GIT" -C "$VAULT" -c core.quotePath=false ls-tree -r --name-only HEAD)"
   printf '%s\n' "$NAMES" | grep -qx 'opencode.json' && fail "base commit contains the user's opencode.json"
   printf '%s\n' "$NAMES" | grep -qx '.opencode/agents/x.md' && fail "base commit contains the user's own agent"
   printf '%s\n' "$NAMES" | grep -qx '.opencode/brain-vault-install-manifest.json' \

@@ -1,9 +1,28 @@
 #!/usr/bin/env bash
 # verify.sh — verificación de salud del vault. Se instala en <vault>/scripts/verify.sh
+#   bash scripts/verify.sh      revisa el vault que lo contiene (en el paquete: corre las pruebas)
+#   -h, --help                  muestra esta ayuda
 set -uo pipefail
 unset CDPATH
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Sin bibliotecas (vault dañado) la verificación igual corre y reporta lo que falta.
+if [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
+  # shellcheck source=lib/common.sh
+  . "$SCRIPT_DIR/lib/common.sh"
+elif [ -f "$SCRIPT_DIR/lib/python3.sh" ]; then
+  # shellcheck source=lib/python3.sh
+  . "$SCRIPT_DIR/lib/python3.sh"
+fi
+if [ $# -gt 0 ]; then
+  command -v usage_error >/dev/null \
+    || { printf '  ✗ falta scripts/lib/common.sh; re-ejecuta install.sh --wire sobre este vault\n' >&2; exit 1; }
+  case "$1" in
+    --help|-h) usage; exit 0 ;;
+    -*) usage_error "flag desconocida: $1" ;;
+    *) usage_error "argumento inesperado: $1" ;;
+  esac
+fi
 if [ -f "$PACKAGE_ROOT/install.sh" ] \
   && [ -f "$PACKAGE_ROOT/templates/brain-config.example.json" ] \
   && [ -f "$PACKAGE_ROOT/tests/run.sh" ]; then
@@ -15,11 +34,7 @@ fi
 VAULT="$PACKAGE_ROOT"
 cd "$VAULT" || exit 1
 PY3="python3"
-if [ -f "$SCRIPT_DIR/lib/python3.sh" ]; then
-  # shellcheck source=lib/python3.sh
-  . "$SCRIPT_DIR/lib/python3.sh"
-  pick_python3 || PY3="python3"
-fi
+if command -v pick_python3 >/dev/null; then pick_python3 || PY3="python3"; fi
 OS="$(uname -s)"
 WIN=0
 case "$OS" in

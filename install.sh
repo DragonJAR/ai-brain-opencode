@@ -33,11 +33,10 @@ done
 # shellcheck source=scripts/lib/common.sh
 . "$LIB/common.sh"
 VERSION="$(cat "$PKG/VERSION" 2>/dev/null || echo desconocida)"
-usage() { sed -n '2,/^set -/p' "$0" | sed '$d'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --config) [ $# -ge 2 ] || die "--config requiere la ruta de un brain-config.json"; CONFIG="$2"; shift 2 ;;
+    --config) [ $# -ge 2 ] || usage_error "--config requiere la ruta de un brain-config.json"; CONFIG="$2"; shift 2 ;;
     --wire) WIRE=1; shift ;;
     --yes|-y) shift ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -46,11 +45,11 @@ while [ $# -gt 0 ]; do
     --with-obsidian) WITH_OBSIDIAN=1; shift ;;
     --with-schedule) WITH_SCHEDULE=1; shift ;;
     --help|-h) usage; exit 0 ;;
-    -*) die "flag desconocida: $1 (usa --help)";;
-    *) if [ -z "$VAULT" ]; then VAULT="$1"; else die "argumento inesperado: $1"; fi; shift ;;
+    -*) usage_error "flag desconocida: $1";;
+    *) if [ -z "$VAULT" ]; then VAULT="$1"; else usage_error "argumento inesperado: $1"; fi; shift ;;
   esac
 done
-[ -n "$VAULT" ] || { usage >&2; exit 1; }
+[ -n "$VAULT" ] || usage_error "falta la ruta del vault"
 if [ "$WIRE" = 1 ]; then
   [ -d "$VAULT" ] || die "--wire requiere la ruta de un vault existente"
   if [ -n "$CONFIG" ] || [ "$WITH_MCP" = 1 ] || [ "$WITH_OBSIDIAN" = 1 ]; then

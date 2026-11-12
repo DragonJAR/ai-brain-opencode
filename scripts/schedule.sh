@@ -9,26 +9,34 @@ set -euo pipefail
 # common.sh también lo quita, pero la ruta del paquete se calcula antes de cargarlo.
 unset CDPATH
 
-VAULT="${1:-}"
-MODE="${2:-install}"
-if [ "$VAULT" = "--help" ] || [ "$VAULT" = "-h" ] || [ "$MODE" = "--help" ] || [ "$MODE" = "-h" ]; then
-  sed -n '2,/^set -/p' "$0" | sed '$d'; exit 0
-fi
-[ -n "$VAULT" ] || { echo "uso: $0 <ruta-del-vault> [--dry-run|--remove [--dry-run]|--help]" >&2; exit 1; }
-[ -d "$VAULT" ] || { echo "  ✗ el vault no existe: $VAULT" >&2; exit 1; }
-case "$MODE" in install|--dry-run|--remove) ;; *) echo "  ✗ modo desconocido: $MODE" >&2; exit 2 ;; esac
-REMOVE_DRY_RUN=0
-case "$MODE ${3:-}" in
-  "--remove --dry-run") REMOVE_DRY_RUN=1 ;;
-  *" ") ;;
-  *) echo "  ✗ argumento inesperado: $3" >&2; exit 2 ;;
-esac
-
 LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
 [ -f "$LIB/common.sh" ] && [ -f "$LIB/ownership.py" ] && [ -f "$LIB/brain_config.py" ] \
   || { echo "  ✗ paquete incompleto: faltan archivos en scripts/lib" >&2; exit 1; }
 # shellcheck source=lib/common.sh
 . "$LIB/common.sh"
+
+VAULT=""
+MODE=install
+REMOVE_DRY_RUN=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --help|-h) usage; exit 0 ;;
+    --remove)
+      [ "$MODE" = install ] || usage_error "argumento inesperado: $1"
+      MODE=--remove ;;
+    --dry-run)
+      case "$MODE:$REMOVE_DRY_RUN" in
+        install:0) MODE=--dry-run ;;
+        --remove:0) REMOVE_DRY_RUN=1 ;;
+        *) usage_error "argumento inesperado: $1" ;;
+      esac ;;
+    -*) usage_error "flag desconocida: $1" ;;
+    *) [ -z "$VAULT" ] || usage_error "argumento inesperado: $1"; VAULT="$1" ;;
+  esac
+  shift
+done
+[ -n "$VAULT" ] || usage_error "falta la ruta del vault"
+[ -d "$VAULT" ] || die "el vault no existe: $VAULT"
 pick_python3 || die "falta Python >= 3.9 (python3, py -3 o python)"
 
 VAULT="$(cd "$VAULT" && pwd -P)"

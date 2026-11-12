@@ -63,6 +63,7 @@ if grep -F 'preservad' "$TMP_ROOT/install-2.txt" | grep -Fv 'AGENTS.md existe' |
   fail "re-install reported a preserved path on an untouched vault"
   grep -F 'preservad' "$TMP_ROOT/install-2.txt" >&2
 fi
+! grep -Fq 'directorio padre symlink' "$TMP_ROOT/install-2.txt" || fail "re-install printed the false 'directorio padre symlink' warning"
 [ -L "$VAULT/CLAUDE.md" ] || fail "CLAUDE.md is not the managed symlink"
 
 # 3. The texts name a command that exists (/daily-journal, never /journal).

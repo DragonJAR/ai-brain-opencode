@@ -175,12 +175,16 @@ floor = Path(__file__).resolve().parent.parent / "floors" / "stub-floor.md"
 floor.write_text("# Stub floor\n", encoding="utf-8")
 PY
     printf '#!/bin/sh\nexit 0\n' > "$destination/scripts/vendor-job.sh"
-    cat > "$destination/templates/generated/claude-md-template.md" <<'MD'
+    if [ -n "${MOCK_GIT_STARTER_TEMPLATE:-}" ]; then
+      cp "$MOCK_GIT_STARTER_TEMPLATE" "$destination/templates/generated/claude-md-template.md"
+    else
+      cat > "$destination/templates/generated/claude-md-template.md" <<'MD'
 # Stub vault instructions
 
 ## Vault Map
 [FILL THIS IN]
 MD
+    fi
   elif [[ "$url" == *humanizer* ]]; then
     printf '# Stub humanizer\n' > "$destination/README.md"
   else

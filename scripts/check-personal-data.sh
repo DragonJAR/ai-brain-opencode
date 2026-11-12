@@ -11,11 +11,12 @@
 # No se escanean directorios que no se distribuyen: .atl/, odd/, __pycache__/.
 # Los correos de ejemplo (example.com/org/net y *.invalid) no son datos del operador.
 # La atribución publicada de README.md y README.es.md no entra en los nombres propios.
+# Los binarios se leen como texto (grep -a): un correo dentro de un PNG también es una fuga.
 set -uo pipefail
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [ -n "${1:-}" ] && PKG="$1"
 BAD=0
-STRUCT_RE="/Users/[A-Za-z0-9._-]+|/(home|Users)/[A-Za-z0-9._-]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}"
+STRUCT_RE="/(home|Users)/[A-Za-z0-9._-]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}"
 
 # Lo que no se distribuye o es el propio detector: una sola lista para los tres chequeos.
 EXCLUDES=(--exclude-dir=.git --exclude-dir=.codegraph --exclude-dir=node_modules
@@ -34,8 +35,9 @@ grep_in_pkg() {
     printf '  ✗ no se puede entrar a %s\n' "$PKG" >&2
     return 2
   fi
-  grep "$@" 2>"$err"
-  rc=$?
+  # Bash no guarda bytes NUL en variables: se quitan aquí, no en cada llamador.
+  grep -a "$@" 2>"$err" | tr -d '\000'
+  rc=${PIPESTATUS[0]}
   if [ "$rc" -ge 2 ]; then
     cat "$err" >&2
   fi
@@ -103,12 +105,22 @@ else
   BAD=1
 fi
 
+# Las URL de los clones del vendor nombran a sus autores: es atribución, no un dato del operador.
+VENDOR_URL_RE='(https?://)?github\.com/(mycelium-hq/ai-brain-starter|adelaidasofia/humanizer)(\.git)?'
+
 echo "== Chequeo de nombres propios =="
 TERMS_FILE="${BRAIN_PERSONAL_TERMS:-$HOME/.config/ai-brain/personal-terms.txt}"
+TERMS=""
 if [ -s "$TERMS_FILE" ]; then
+  # Sin CR, líneas vacías ni comentarios: una línea vacía como patrón coincide con todo.
+  TERMS="$(mktemp "${TMPDIR:-/tmp}/ai-brain-terms.XXXXXX")" || die "no se pudo crear un temporal"
+  trap 'rm -f "$TERMS"' EXIT
+  tr -d '\r' < "$TERMS_FILE" | grep -vE '^[[:space:]]*(#|$)' > "$TERMS" || true
+fi
+if [ -n "$TERMS" ] && [ -s "$TERMS" ]; then
   # LICENSE se excluye: atribución del autor, no dato del operador.
   # odd/ y .atl/ no son archivos de producto.
-  RAW="$(grep_in_pkg -rniE -f "$TERMS_FILE" . \
+  RAW="$(grep_in_pkg -rniE -f "$TERMS" . \
 "${EXCLUDES[@]}" --exclude=LICENSE)"
   rc=$?
   if [ "$rc" -ge 2 ]; then
@@ -121,7 +133,7 @@ if [ -s "$TERMS_FILE" ]; then
     printf '%s\n' "$RAW" > "$raw_file"
     while IFS= read -r line; do
       [ -n "$line" ] || continue
-      printf '%s\n' "$line" | grep -qiE 'mycelium-hq/ai-brain-starter|humanizer' && continue
+      printf '%s\n' "$line" | sed -E "s#$VENDOR_URL_RE##g" | grep -qiE -f "$TERMS" || continue
       readme_attribution "$line" && continue
       KEPT="${KEPT}${line}"$'\n'
     done < "$raw_file"

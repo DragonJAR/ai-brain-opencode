@@ -38,6 +38,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **`verify.sh`:** el chequeo de cableado contaba los comandos del paquete y, en Windows, el clon de humanizer
   como skill copiada; ahora cuenta solo lo cableado desde el starter. Los symlinks rotos se buscan también en
   `⚙️ Meta/scripts` y en `CLAUDE.md`.
+- **`check-personal-data.sh`:** no veía correos dentro de archivos binarios, una lista de términos con CRLF no
+  coincidía con nada y una línea vacía en ella marcaba todo el paquete. Además, cualquier línea con "humanizer"
+  quedaba exenta; ahora solo se eximen las URL de los clones del vendor. Los `#` de la lista son comentarios.
+- **`check-personal-data.sh`:** no veía correos dentro de archivos binarios, una lista de términos con CRLF no
+  coincidía con nada y una línea vacía en ella marcaba todo el paquete. Además, cualquier línea con "humanizer"
+  quedaba exenta; ahora solo se eximen las URL de los clones del vendor. Los `#` de la lista son comentarios.
 - **Linux:** el recordatorio del diario busca el bus de sesión en `$XDG_RUNTIME_DIR` cuando está definido, antes de
   `/run/user/<uid>`.
 

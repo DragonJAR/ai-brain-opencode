@@ -26,6 +26,7 @@ Responde y escribe en {{LANGUAGE}}. Los nombres de carpeta quedan en inglés a p
 ### Sesión
 - Inicio: lee este archivo y `⚙️ Meta/Sessions/` (última sesión).
 - Cierre: el plugin `brain-vault` detecta la señal de cierre ("chao", "eso es todo"...) e inyecta el cascade: guarda `⚙️ Meta/Sessions/<fecha-hora>.md`, registra decisiones en `⚙️ Meta/Decisions/` y compromete solo las rutas tocadas.
+- Configuración personal: `/setup-brain` (la entrevista del paquete). El skill `ai-brain-starter` del vendor es su instalador para Claude Code: no lo cargues en este vault.
 - Verificación: `bash scripts/verify.sh` y auditoría de integridad `python3 scripts/audit.py .` (o `/audit`).
 
 ### Scheduler (si se instaló con `--with-schedule`)

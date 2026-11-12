@@ -5,7 +5,17 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 
 ## [Unreleased]
 
+### Cambiado
+- **README en inglés y español:** más cortos, ordenados por lo que hay que hacer (instalar, primeros pasos,
+  comandos, configurar, actualizar).
+
 ### Corregido
+- **Comandos que se sugerían y no existían:** los skills del vendor y el instalador hablaban de `/journal` y de
+  una "entrevista de setup" sin comando. `/journal` es ahora un alias de `/daily-journal`, y `/setup-brain` es la
+  entrevista del paquete: completa `AGENTS.md` y `brain-config.json` sin cargar el instalador del vendor, que es
+  para Claude Code.
+- **Test del commit base:** comparaba nombres con emoji contra la salida de git, que los entrecomilla por defecto;
+  fallaba en cualquier equipo.
 - **`/audit`:** un vault recién instalado mostraba 38 enlaces rotos de las notas de piso del vendor. La auditoría
   revisa solo tu contenido: `⚙️ Meta/Floors`, `⚙️ Meta/scripts`, `scripts/` y los archivos raíz (`AGENTS.md`,
   `CLAUDE.md`…) quedan fuera, y una carpeta tuya llamada `docs`, `templates` o `tests` ya no se omite.

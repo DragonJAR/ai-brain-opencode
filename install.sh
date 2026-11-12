@@ -686,7 +686,7 @@ if [ "$WIRE" = 1 ]; then
   echo "   2. Verificación del vault: bash $VAULT/scripts/verify.sh"
 else
   echo "   1. Reinicia OpenCode o ejecuta /reload para que cargue el plugin."
-  echo "   2. Edita AGENTS.md (sección Me / Current Focus) o corre la entrevista de setup."
+  echo "   2. En OpenCode, sobre el vault: /setup-brain — la entrevista que personaliza AGENTS.md y tu config."
   echo "   3. Esta noche: /daily-journal — la primera entrada activa el sistema."
   echo "   4. Verificación: bash $VAULT/scripts/verify.sh"
 fi

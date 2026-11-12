@@ -3,6 +3,13 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Este proyecto sigue
 [SemVer](https://semver.org/lang/es/). La versión vigente está en `VERSION` y la muestra `bash install.sh --version`.
 
+## [Unreleased]
+
+### Corregido
+- **`/audit`:** un vault recién instalado mostraba 38 enlaces rotos de las notas de piso del vendor. La auditoría
+  revisa solo tu contenido: `⚙️ Meta/Floors`, `⚙️ Meta/scripts`, `scripts/` y los archivos raíz (`AGENTS.md`,
+  `CLAUDE.md`…) quedan fuera, y una carpeta tuya llamada `docs`, `templates` o `tests` ya no se omite.
+
 ## [0.2.0] - 2026-11-11
 
 Primera versión numerada. Reúne las correcciones de la auditoría completa del paquete.

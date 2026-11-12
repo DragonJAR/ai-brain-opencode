@@ -15,6 +15,19 @@ command -v opencode >/dev/null || job_fail "opencode no disponible"
 # La fecha del informe sigue la zona horaria del vault, no la del host.
 DATE_TAG="$(brain_config "$CFG" today 2>> "$LOG")" || DATE_TAG="$(date '+%Y-%m-%d')"
 TIMEOUT_SECONDS=900
-run_with_timeout "$TIMEOUT_SECONDS" opencode run \
-  "Ejecuta /insights: revisión semanal de mis entradas de diario. Guarda el informe en 📝 Notes/insights-${DATE_TAG}.md y no hagas preguntas." \
+TASK="revisión semanal de mis entradas de diario. Guarda el informe en 📝 Notes/insights-${DATE_TAG}.md y no hagas preguntas."
+
+# Sin nadie delante, sin --auto `opencode run` rechaza todo permiso y no puede
+# guardar el informe. Los flags salen de la ayuda de la CLI instalada: v2 no
+# tiene --command y manda el mensaje como texto, así que "/insights" no correría
+# el comando; se nombra la skill que ese comando invoca.
+RUN_HELP="$(opencode run --help 2>&1 < /dev/null || true)"
+case "$RUN_HELP" in *--auto*) ;; *) job_fail "opencode run no admite --auto; actualiza OpenCode" ;; esac
+ARGS=(run --auto)
+case "$RUN_HELP" in *--archived*) ARGS+=(--archived) ;; esac
+case "$RUN_HELP" in
+  *--command*) ARGS+=(--command insights "$TASK") ;;
+  *) ARGS+=("Usa la skill \`insights\` para la $TASK") ;;
+esac
+run_with_timeout "$TIMEOUT_SECONDS" opencode "${ARGS[@]}" < /dev/null \
   >> "$LOG" 2>&1 || job_fail "opencode run falló o superó ${TIMEOUT_SECONDS} s"

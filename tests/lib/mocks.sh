@@ -133,6 +133,18 @@ ai_brain_mock_opencode() {
   mkdir -p "$bin"
   cat > "$bin/opencode" <<'SH'
 #!/bin/sh
+# MOCK_OPENCODE_CALLS: one line per call, each argument as <arg>.
+# MOCK_OPENCODE_HELP: file printed for `run --help` (defaults to v2.2.7 flags).
+if [ -n "${MOCK_OPENCODE_CALLS:-}" ]; then
+  for arg in "$@"; do printf '<%s>' "$arg"; done >> "$MOCK_OPENCODE_CALLS"
+  printf '\n' >> "$MOCK_OPENCODE_CALLS"
+fi
+if [ "${1:-}" = run ] && [ "${2:-}" = --help ]; then
+  if [ -n "${MOCK_OPENCODE_HELP:-}" ]; then cat "$MOCK_OPENCODE_HELP"; else
+    printf '%s\n' 'USAGE' '  opencode run [flags] [<message...>]' 'FLAGS' \
+      '  --agent string' '  --archived' '  --auto'
+  fi
+fi
 exit 0
 SH
   chmod +x "$bin/opencode"

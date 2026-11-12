@@ -48,6 +48,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   carpeta borrada nunca se confirmaba y con `commit.gpgsign` activo el commit fallaba o esperaba la frase de paso.
   Ahora se omiten (y se anotan) las rutas ignoradas, los borrados entran en el snapshot y el commit no se firma ni
   pide nada.
+- **Revisión semanal (`insights-weekly`):** `opencode run` corría sin `--auto`, así que rechazaba todo permiso y no
+  podía guardar el informe, y pedía "/insights" en medio de una frase, que OpenCode v2 envía como texto y no como
+  comando. Ahora usa `--auto` (y `--archived` si existe), invoca `--command insights` cuando la CLI lo ofrece y, si
+  no, nombra la skill `insights`; sin `--auto` disponible el trabajo falla con un mensaje claro.
 - **`check-personal-data.sh`:** no veía correos dentro de archivos binarios, una lista de términos con CRLF no
   coincidía con nada y una línea vacía en ella marcaba todo el paquete. Además, cualquier línea con "humanizer"
   quedaba exenta; ahora solo se eximen las URL de los clones del vendor. Los `#` de la lista son comentarios.

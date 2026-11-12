@@ -193,6 +193,8 @@ MD
   fi
   exit 0
 fi
+# MOCK_GIT_REAL=<path to git>: only clone is stubbed; the vault repo is real.
+if [ -n "${MOCK_GIT_REAL:-}" ]; then exec "$MOCK_GIT_REAL" "$@"; fi
 if [ "${1:-}" = -C ]; then
   repo="$2"
   shift 2
@@ -205,7 +207,11 @@ if [ "${1:-}" = -C ]; then
       [ "${MOCK_GIT_CLEAN:-0}" = 1 ] || printf ' M .gitignore\n'
       exit 0 ;;
     add) exit 0 ;;
-    diff) [ "${MOCK_GIT_CLEAN:-0}" = 1 ] || exit 1; exit 0 ;;
+    check-ignore) exit 1 ;;
+    diff)
+      [ "${MOCK_GIT_CLEAN:-0}" = 1 ] && exit 0
+      case " $* " in *" --name-only "*) printf 'AGENTS.md\0'; exit 0 ;; esac
+      exit 1 ;;
     commit) exit 0 ;;
     var) reply_var ;;
   esac

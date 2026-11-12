@@ -61,10 +61,10 @@ then
   failures=$((failures + 1))
 fi
 
-# The base commit stages the managed artifacts, the MCP config created after the
-# git section, and the empty structure — never only the first four paths.
-if ! grep -Eq 'add -- .*opencode\.json' "$MOCK_GIT_CALLS"; then
-  printf 'FAIL: base commit did not stage opencode.json created by --with-mcp\n' >&2
+# The base commit stages the managed artifacts and the empty structure. This
+# opencode.json existed before the install: it is the user's and stays out.
+if grep -Eq 'add -- .*opencode\.json' "$MOCK_GIT_CALLS"; then
+  printf "FAIL: base commit staged the user's pre-existing opencode.json\n" >&2
   failures=$((failures + 1))
 fi
 if ! grep -Eq 'add -- .*📓 Journals/\.gitkeep' "$MOCK_GIT_CALLS"; then

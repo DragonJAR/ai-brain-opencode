@@ -174,6 +174,7 @@ if [ "${1:-}" = clone ]; then
       "$destination/scripts" "$destination/floors" "$destination/templates/generated"
     printf 'ref: refs/heads/main\n' > "$destination/.git/HEAD"
     printf '# Stub starter skill\n' > "$destination/SKILL.md"
+    printf '#!/bin/sh\nexit 0\n' > "$destination/bootstrap.sh"
     n="${MOCK_GIT_STARTER_SKILLS:-}"
     if [ -n "$n" ] && [ "$n" -eq "$n" ] 2>/dev/null && [ "$n" -gt 0 ]; then
       i=1
@@ -186,7 +187,11 @@ if [ "${1:-}" = clone ]; then
       mkdir -p "$destination/skills/journal"
       printf '# Stub journal skill\n' > "$destination/skills/journal/SKILL.md"
     fi
-    printf '# Stub command\n' > "$destination/commands/brain-journal.md"
+    if [ -n "${MOCK_GIT_STARTER_COMMAND:-}" ]; then
+      cp "$MOCK_GIT_STARTER_COMMAND" "$destination/commands/brain-journal.md"
+    else
+      printf '# Stub command\n' > "$destination/commands/brain-journal.md"
+    fi
     cat > "$destination/scripts/generate_floor_stubs.py" <<'PY'
 from pathlib import Path
 floor = Path(__file__).resolve().parent.parent / "floors" / "stub-floor.md"

@@ -358,7 +358,8 @@ def summary(data):
 # Each put_* returns None when the path is now managed, or the reason it was
 # preserved. Nothing the vault owns differently is ever overwritten.
 
-def put_file(data, vault, rel, src, mode=None):
+def put_file(data, vault, rel, src, mode=None, transform=None):
+    """`transform` (bytes -> bytes) adapts the content; the record is the written file's hash."""
     src = pathlib.Path(src)
     if not src.is_file():
         raise ManifestError("falta " + str(src) + " en el paquete; instalación abortada sin cambios posteriores")
@@ -376,8 +377,12 @@ def put_file(data, vault, rel, src, mode=None):
         if not owned:
             return "archivo existente no administrado preservado: " + rel
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if not dst.exists() or dst.read_bytes() != src.read_bytes():
-        shutil.copy(src, dst)
+    content = src.read_bytes() if transform is None else transform(src.read_bytes())
+    if not dst.exists() or dst.read_bytes() != content:
+        if transform is None:
+            shutil.copy(src, dst)
+        else:
+            dst.write_bytes(content)
     if mode is not None:
         os.chmod(dst, mode)
     data["files"][rel] = file_info(dst)

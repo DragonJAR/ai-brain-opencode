@@ -162,8 +162,9 @@ PY
   if [ ! -L "$VAULT/.opencode/skills/new-skill" ] || [ ! -f "$VAULT/.opencode/skills/new-skill/SKILL.md" ]; then
     fail "--wire did not link the skill added by the updated starter"
   fi
-  if [ ! -L "$VAULT/.opencode/commands/new-command.md" ] || [ ! -f "$VAULT/.opencode/commands/new-command.md" ]; then
-    fail "--wire did not link the command added by the updated starter"
+  # Starter commands are rewritten copies on every platform, never symlinks.
+  if [ -L "$VAULT/.opencode/commands/new-command.md" ] || [ ! -f "$VAULT/.opencode/commands/new-command.md" ]; then
+    fail "--wire did not copy the command added by the updated starter"
   fi
   if [ -e "$VAULT/📓 Journals" ] || [ -e "$VAULT/⚙️ Meta/journal-config.md" ]; then
     fail "--wire re-scaffolded a removed vault directory or config file"

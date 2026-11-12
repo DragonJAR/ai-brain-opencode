@@ -50,11 +50,11 @@ check() {
   if "$@" >/dev/null 2>&1; then chk "$label" 1; else chk "$label" 0; fi
 }
 
-# wired_count <dir del starter> <dir del vault> <d|f>: entradas del starter cableadas en
-# el vault (symlink en POSIX, copia en Windows). Los comandos del paquete y los clones
+# wired_count <dir del starter> <dir del vault> <d|f> <link|copy>: entradas del starter
+# cableadas en el vault como symlink o como copia. Los comandos del paquete y los clones
 # del vendor (ai-brain-starter, humanizer) no cuentan como cableado.
 wired_count() {
-  local src="$1" dst="$2" kind="$3" entry name count=0
+  local src="$1" dst="$2" kind="$3" how="$4" entry name count=0
   for entry in "$src"/*; do
     name="${entry##*/}"
     if [ "$kind" = d ]; then
@@ -64,7 +64,7 @@ wired_count() {
       [ -f "$entry" ] || continue
       case "$name" in *.md) ;; *) continue ;; esac
     fi
-    if [ "$WIN" = 1 ]; then
+    if [ "$how" = copy ]; then
       if [ -e "$dst/$name" ] && [ ! -L "$dst/$name" ]; then count=$((count + 1)); fi
     elif [ -L "$dst/$name" ]; then
       count=$((count + 1))
@@ -80,12 +80,13 @@ if [ -d "$starter" ] && [ ! -L "$starter" ] && [ -f "$starter/SKILL.md" ]; then
 else
   chk "starter clonado" 0
 fi
-WIRED_LABEL="enlazad"
-if [ "$WIN" = 1 ]; then WIRED_LABEL="copiad"; fi
-SK="$(wired_count "$starter/skills" .opencode/skills d)"
-check "skills ${WIRED_LABEL}as ($SK)" [ "$SK" -ge 1 ]
-CMD="$(wired_count "$starter/commands" .opencode/commands f)"
-check "comandos ${WIRED_LABEL}os ($CMD)" [ "$CMD" -ge 1 ]
+SKILLS_HOW=link SKILLS_LABEL="enlazadas"
+if [ "$WIN" = 1 ]; then SKILLS_HOW=copy SKILLS_LABEL="copiadas"; fi
+SK="$(wired_count "$starter/skills" .opencode/skills d "$SKILLS_HOW")"
+check "skills $SKILLS_LABEL ($SK)" [ "$SK" -ge 1 ]
+# Los comandos se copian adaptados a OpenCode en todas las plataformas (wire.py).
+CMD="$(wired_count "$starter/commands" .opencode/commands f copy)"
+check "comandos copiados ($CMD)" [ "$CMD" -ge 1 ]
 # `find -xtype` es solo de GNU: en macOS fallaba en silencio y este chequeo pasaba siempre.
 BAD=$(find .opencode "⚙️ Meta/scripts" CLAUDE.md -type l ! -exec test -e {} \; -print 2>/dev/null | wc -l | tr -d ' ')
 if [ "$BAD" -eq 0 ]; then chk "sin symlinks rotos" 1; else chk "symlinks rotos: $BAD" 0; fi

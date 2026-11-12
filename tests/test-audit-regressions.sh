@@ -206,7 +206,7 @@ real_git -C "$UPD_STARTER" checkout -q --detach
 for run in 1 2; do
   bash "$GIT_VAULT/scripts/jobs/update-brain.sh" > "$TMP_ROOT/update-$run.txt" 2>&1 || fail "update-brain run $run exited non-zero"
 done
-grep -Fq 'HEAD suelto' "$GIT_VAULT/⚙️ Meta/logs/update.log" || fail "update-brain tried to pull a clone pinned to a commit"
+grep -Fq 'HEAD suelto' "$GIT_VAULT/⚙️ Meta/logs/update-brain.log" || fail "update-brain tried to pull a clone pinned to a commit"
 
 # 14. --purge-clones still works after the clone moved on: a clone is owned by
 #     its origin, not by a fingerprint that the first pull invalidates.

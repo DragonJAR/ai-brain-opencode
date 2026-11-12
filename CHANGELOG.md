@@ -11,6 +11,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   `CLAUDE.md`…) quedan fuera, y una carpeta tuya llamada `docs`, `templates` o `tests` ya no se omite.
 - **`📝 Notes/Raw/` inmutable de verdad:** el plugin ya no inyecta frontmatter en las fuentes nuevas y `/audit` no
   exige `type:` allí; siguen fuera de las huérfanas y en la cola de `/ingest`.
+- **Logs de los trabajos:** `daily-maintenance` y `update-brain` escribían `maintenance.log` y `update.log` mientras
+  launchd escribía `<trabajo>.log`, que nunca se rotaba. Ahora cada trabajo tiene un solo log, `<trabajo>.log`, en
+  el trabajo, launchd y cron (que además deja de perder la salida). Los logs antiguos pueden borrarse.
 
 ## [0.2.0] - 2026-11-11
 

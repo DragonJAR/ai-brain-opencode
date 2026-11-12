@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Mantenimiento diario: índice del diario + snapshot git de lo nuevo.
 set -euo pipefail
-VAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+VAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 cd "$VAULT"
 mkdir -p "$VAULT/⚙️ Meta/logs"
 LOG="$VAULT/⚙️ Meta/logs/maintenance.log"

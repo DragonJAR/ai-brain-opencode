@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Recordatorio del diario. Notificación del sistema operativo.
 set -euo pipefail
-VAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+VAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 cd "$VAULT"
 CFG="$VAULT/⚙️ Meta/brain-config.json"
 mkdir -p "$VAULT/⚙️ Meta/logs"

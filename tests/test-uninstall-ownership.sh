@@ -276,7 +276,19 @@ mkdir -p "$MISSING_MANIFEST_VAULT"
 cp "$MOCK_CRONTAB_STATE" "$TMP_ROOT/crontab-before-missing-manifest"
 cp "$MOCK_CRONTAB_CALLS" "$TMP_ROOT/calls-before-missing-manifest"
 cp "$MOCK_CRONTAB_WRITES" "$TMP_ROOT/writes-before-missing-manifest"
-bash "$PKG/scripts/schedule.sh" "$MISSING_MANIFEST_VAULT" --remove > "$TMP_ROOT/missing-manifest-remove.txt" 2>&1
+# A missing manifest is a documented fail-closed NO-OP: exit 0 with the artifacts
+# preserved (a legacy-manifest failure exits 1 — that asymmetry is intentional).
+missing_rc=0
+bash "$PKG/scripts/schedule.sh" "$MISSING_MANIFEST_VAULT" --remove > "$TMP_ROOT/missing-manifest-remove.txt" 2>&1 || missing_rc=$?
+if [ "$missing_rc" -ne 0 ]; then
+  printf 'FAIL: missing-manifest removal exited %s (documented contract: exit 0, artifacts preserved)\n' "$missing_rc" >&2
+  cat "$TMP_ROOT/missing-manifest-remove.txt" >&2
+  failures=$((failures + 1))
+fi
+if ! grep -Fq 'se preservaron los artefactos programados' "$TMP_ROOT/missing-manifest-remove.txt"; then
+  printf 'FAIL: missing-manifest removal did not explain the preservation\n' >&2
+  failures=$((failures + 1))
+fi
 if ! cmp -s "$MOCK_CRONTAB_STATE" "$TMP_ROOT/crontab-before-missing-manifest"; then
   printf 'FAIL: missing-manifest removal changed the crontab\n' >&2
   failures=$((failures + 1))

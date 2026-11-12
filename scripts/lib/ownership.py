@@ -86,9 +86,19 @@ def save(path, data):
     data["seal"] = seal(data)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + ".tmp." + str(os.getpid()))
-    temp.write_text(json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.chmod(temp, 0o600)
-    os.replace(temp, path)
+    try:
+        with open(temp, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temp, 0o600)
+        os.replace(temp, path)
+    except BaseException:
+        try:
+            temp.unlink()
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def relative(value):
@@ -250,7 +260,10 @@ def dispatch(path, action, argv):
     elif action == "cron-json":
         print(json.dumps(data["cron_lines"], ensure_ascii=False, separators=(",", ":")))
     elif action == "set-cron":
-        data["cron_lines"] = json.loads(argv[0])
+        value = json.loads(argv[0])
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ManifestError("set-cron expects a JSON array of strings")
+        data["cron_lines"] = value
         save(path, data)
     elif action == "clear-cron":
         data["cron_lines"] = []
@@ -277,9 +290,12 @@ def main(argv):
     except ManifestError as error:
         print("fallo: " + str(error), file=sys.stderr)
         return error.exit_code
-    except (OSError, ValueError, TypeError, AttributeError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, TypeError, AttributeError, IndexError, json.JSONDecodeError) as error:
         print("fallo: " + str(error), file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        print("fallo: interrumpido", file=sys.stderr)
+        return 130
 
 
 if __name__ == "__main__":

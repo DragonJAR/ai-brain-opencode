@@ -21,7 +21,7 @@
 | Árbol de carpetas (`📓 Journals/`, `🏠 Home/`, `👤 CRM/`, `📝 Notes/`, `💼 Business/`, `🚀 I+D/`, `⚙️ Meta/`) | Layout canónico de notas y meta |
 | `.opencode/skills/ai-brain-starter/` (+ symlinks de skills/comandos) | Clon del starter; skills/comandos son enlaces relativos |
 | `.opencode/plugins/brain-vault/index.js` | Plugin OpenCode (contexto, cierre, reunión, frontmatter) |
-| `AGENTS.md` (+ `CLAUDE.md` → `AGENTS.md`) | Memoria del cerebro por sesión |
+| `AGENTS.md` (+ `CLAUDE.md` → `AGENTS.md`) | Memoria del cerebro por sesión; OpenCode la lee en cada sesión |
 | `⚙️ Meta/brain-config.json` | Idioma, zona, hora del diario, hábitos, horarios |
 | `scripts/verify.sh`, `scripts/lib/ownership.py`, `scripts/lib/python3.sh`, `scripts/jobs/*.sh` | Salud del vault, propiedad, detección de Python, trabajos |
 | `.opencode/brain-vault-install-manifest.json` | Huellas de propiedad para desinstalar con seguridad |
@@ -34,7 +34,7 @@
 | [OpenCode](https://opencode.ai/docs) con un modelo configurado | Runtime que carga el vault y el plugin |
 | Git | Clonar starter + humanizer; commit base del vault |
 | Python 3.9+ (`python3`, `py -3` o `python` en `PATH`) | Instalador, ownership y helpers del diario (el instalador valida la versión) |
-| Node 18+ (opcional) | Si está, el instalador corre `node --check` sobre el plugin |
+| Node (opcional) | Permite al instalador validar la sintaxis del plugin con `node --check`; la versión no se valida |
 | macOS, Linux, WSL2 Ubuntu o Windows nativo (Git Bash) | POSIX: symlinks + launchd/cron · Windows: copias de archivo + **schtasks** |
 | Obsidian (opcional) | Ver el vault; `--with-obsidian` instala cinco plugins comunitarios |
 
@@ -53,7 +53,7 @@ La ruta del vault es **siempre explícita**. No detecta vaults automáticamente 
 | `--config <archivo>` | Siembra `⚙️ Meta/brain-config.json` desde un JSON |
 | `--wire` | Re-enlaza un vault existente tras actualizar el starter (sin clonar/scaffold; puede ir con `--with-schedule`) |
 | `--with-mcp` | Añade MCP remotos `granola` + `chatprd` en el `opencode.json` del vault (envían conversación al usarlos—opt-in) |
-| `--with-obsidian` | Instala cinco plugins comunitarios de Obsidian bajo `.obsidian/plugins/` |
+| `--with-obsidian` | Instala cinco plugins comunitarios de Obsidian bajo `.obsidian/plugins/` (solo macOS/Linux) |
 | `--with-schedule` | Registra trabajos (launchd en macOS, cron en Linux, schtasks en Windows) |
 
 También acepta: `--help` / `-h`, y `--yes` / `-y` (sin preguntas; el instalador no es interactivo).
@@ -82,7 +82,7 @@ El instalador copia el plugin a `<vault>/.opencode/plugins/brain-vault/index.js`
 |---|---|
 | Reglas de contexto por turno | `brain-config.json` (`language`, `journal.time`, `timezone`, `habits`, `extra_rules`) |
 | Cascade de cierre | Palabras como «chao» / «eso es todo» (según idioma) |
-| Disparador de reunión | Frases como «acabo de tener una reunión» |
+| Disparador de reunión | Frases como «acabo de tener una reunión» → flujo meeting-todos |
 | Frontmatter automático en markdown nuevo | `type:` + `created:` según carpeta |
 
 ## Comandos slash
@@ -99,22 +99,27 @@ sesión de OpenCode abierta sobre el vault; cada uno delega en su skill, que el 
 | `/insights` | Insights semanales o mensuales del diario: reconocimiento de patrones y feedback de panel |
 | `/meeting-todos` | Extraer action items de una nota de reunión y enrutarlos al archivo de tareas correcto |
 | `/cierre` | Terminó una llamada comercial: seguimiento completo — CRM, tareas, borrador de email, recordatorio, coaching |
+| `/today` | Briefing ejecutivo diario cruzando diario, sesiones recientes, engagements y CRM |
 | **Vault y conocimiento** | |
 | `/diagnose` | Autodiagnóstico de la instalación (archivo de instrucciones, carpetas Meta, skills, hooks, MCPs) |
 | `/setup-vault-types` | Configurar qué tipos de documento usa tu vault y crear los extractores |
 | `/second-brain-mapping` | Mapear el vault: metadatos estructurados por archivo tipado, insights cruzados, grafo opcional |
 | `/graphify` | Convertir el vault en un grafo de conocimiento agrupado con salidas HTML y JSON |
 | `/optimize-brain` | Optimización profunda del vault: CRM, grafos, dashboards, compresión, wikilinks |
+| `/ingest` | Ingesta de fuentes crudas de `📝 Notes/Raw/` hacia notas compiladas con wikilinks |
+| `/audit` | Auditoría determinista del vault: enlaces rotos, notas huérfanas, markdown sin tipo, raw pendiente |
 | **Patrones e ideas** | |
 | `/patterns` | Escanear sesiones recientes en busca de patrones recurrentes y convertirlos en capturas (reglas, notas de concepto, semillas de escritura) |
 | `/deconstruct` | Analista de primeros principios: sacar supuestos ocultos, hallar verdades fundacionales, reconstruir |
 | `/evolve` | Agrupar instintos endurecidos en un comando / skill / agente propuesto (Instinct Engine) |
 | `/instinct-export` | Exportar la librería de instintos a un pack YAML portátil (Instinct Engine) |
 | `/instinct-import` | Importar un pack YAML de instintos con merge por umbrales de confianza (Instinct Engine) |
+| `/ideas` | Descubrimiento de patrones cruzados entre Negocios, I+D y Notas |
 | **Contenido** | |
 | `/humanizer` | Quitar los AI-isms de la prosa externa y reescribirla en tu voz real |
 | `/repurpose-talk` | Convertir una ponencia en 10–30 piezas de contenido |
 | `/nano-banana` | Generar o editar imágenes con el modelo Gemini Image de Google |
+| `/create` | Redacción de contenido humanizado a partir del contexto del vault sin clichés de IA |
 
 ## Configuración
 
@@ -154,6 +159,9 @@ Defaults de `templates/brain-config.example.json` y `scripts/schedule.sh`:
 | `insights-weekly.sh` | `21:00` | Domingo |
 | `daily-maintenance.sh` | `03:30` | Todos los días |
 | `update-brain.sh` | `08:00` | Lunes |
+
+Los horarios disparan en la **zona horaria del host**; la `timezone` de `brain-config.json` gobierna las
+fechas que renderiza el plugin, no el reloj del scheduler.
 
 ```bash
 bash scripts/schedule.sh ~/ruta/a/mi-cerebro --dry-run   # muestra jobs; no escribe launchd/cron
@@ -204,9 +212,10 @@ Solo borra artefactos **propios sin cambios** del manifiesto. Lo modificado, sym
 ai-brain-opencode/
 ├── install.sh · uninstall.sh
 ├── plugin/brain-vault/index.js
-├── scripts/{schedule,verify,check-personal-data}.sh
+├── scripts/{schedule,verify,check-personal-data}.sh · scripts/audit.py
 ├── scripts/lib/ownership.py
 ├── templates/brain-config.example.json
+├── templates/commands/*.md
 ├── templates/jobs/*.sh
 ├── tests/run.sh
 └── docs/COMPAT.md

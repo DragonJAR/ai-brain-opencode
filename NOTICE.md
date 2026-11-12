@@ -28,5 +28,6 @@ la sesión **cuando los usas**. Son opt-in explícito y requieren autenticación
 
 ## Adaptación OpenCode
 
-El puerto a OpenCode (plugin de hooks, plugin de scheduling, compatibilidad Claude Code → OpenCode) está en
-`docs/COMPAT.md` y en el diff de este repositorio respecto al upstream.
+El puerto a OpenCode (plugin de hooks, scheduler multiplataforma con launchd/cron/schtasks, y la
+compatibilidad Claude Code → OpenCode) está documentado en `docs/COMPAT.md` y implementado en el código de
+este paquete (`plugin/` y `scripts/`).

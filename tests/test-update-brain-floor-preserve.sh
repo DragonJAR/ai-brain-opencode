@@ -50,9 +50,21 @@ if ! cmp -s "$VAULT/⚙️ Meta/Floors/shared-floor.md" "$TMP_ROOT/floor.snapsho
   cat "$TMP_ROOT/out.txt" "$TMP_ROOT/err.txt" >&2 || true
   exit 1
 fi
-if ! grep -q 'cp -n' "$VAULT/scripts/jobs/update-brain.sh"; then
-  printf 'FAIL: update-brain.sh lost cp -n floor copy\n' >&2
+
+# Behavior, not implementation: a NEW vendor floor added by the starter must be
+# copied on the next run, while the user-edited floor stays untouched.
+cat > "$STARTER/floors/brand-new-floor.md" <<'MD'
+# New vendor floor (must be copied)
+MD
+bash "$VAULT/scripts/jobs/update-brain.sh" >>"$TMP_ROOT/out.txt" 2>>"$TMP_ROOT/err.txt"
+if [ ! -f "$VAULT/⚙️ Meta/Floors/brand-new-floor.md" ]; then
+  printf 'FAIL: update-brain.sh did not copy the new vendor floor\n' >&2
+  cat "$TMP_ROOT/out.txt" "$TMP_ROOT/err.txt" >&2 || true
+  exit 1
+fi
+if ! cmp -s "$VAULT/⚙️ Meta/Floors/shared-floor.md" "$TMP_ROOT/floor.snapshot"; then
+  printf 'FAIL: second update-brain.sh run overwrote the user-edited floor\n' >&2
   exit 1
 fi
 
-printf 'PASS: user-edited floor survived update-brain.sh\n'
+printf 'PASS: user-edited floor survived update-brain.sh and new floors get copied\n'

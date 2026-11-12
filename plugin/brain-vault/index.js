@@ -12,7 +12,7 @@
 // The config is user-edited, so nothing here trusts its shape: a malformed
 // value degrades to the documented default instead of breaking every hook.
 
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { isAbsolute, join, relative, resolve } from "node:path"
 
 const DEFAULTS = {
@@ -100,19 +100,19 @@ function readConfig(vaultDir) {
     console.warn(`[brain-vault] Advertencia en ⚙️ Meta/brain-config.json (${issues.join(", ")}); usando valores por defecto`)
   }
 
+  // Allowlist, never a blind spread: unknown or malformed keys cannot leak
+  // into consumers of this config.
   return {
-    ...DEFAULTS,
-    ...raw,
+    vault_name: typeof raw.vault_name === "string" && raw.vault_name.trim() ? raw.vault_name : DEFAULTS.vault_name,
     language: raw.language === "en" ? "en" : "es",
     timezone,
     journal: {
-      ...DEFAULTS.journal,
-      ...journal,
       time: journalTime,
+      topics: stringList(journal.topics).length > 0 ? stringList(journal.topics) : [...DEFAULTS.journal.topics],
+      raw: journal.raw === false ? false : DEFAULTS.journal.raw,
+      gratitude: journal.gratitude === false ? false : DEFAULTS.journal.gratitude,
     },
     schedule: {
-      ...DEFAULTS.schedule,
-      ...schedule,
       insights_time: TIME_PATTERN.test(String(schedule.insights_time ?? "")) ? schedule.insights_time : DEFAULTS.schedule.insights_time,
       maintenance_time: TIME_PATTERN.test(String(schedule.maintenance_time ?? "")) ? schedule.maintenance_time : DEFAULTS.schedule.maintenance_time,
       update_time: TIME_PATTERN.test(String(schedule.update_time ?? "")) ? schedule.update_time : DEFAULTS.schedule.update_time,
@@ -142,6 +142,7 @@ const FOLDER_TYPES = [
   ["⚙️ Meta/Decisions/", "decision"],
   ["⚙️ Meta/", "note"],
   ["🏠 Home/", "note"],
+  ["📝 Notes/Raw/", "raw"],
   ["📝 Notes/", "note"],
   ["💼 Business/", "note"],
   ["🚀 I+D/", "note"],
@@ -154,6 +155,9 @@ function noteType(relPath) {
   return match ? match[1] : ""
 }
 
+// Real frontmatter, not a markdown thematic break that merely starts with "---".
+const FRONTMATTER_PATTERN = /^---\r?\n[\s\S]*?\r?\n---/
+
 export default {
   id: "brain-vault",
   async setup(ctx) {
@@ -162,6 +166,15 @@ export default {
       vault = process.cwd()
       console.warn(`[brain-vault] ctx.location.directory no provisto; usando cwd como vault (${vault})`)
     }
+
+    // No config file = not a vault of this package. Registering hooks here
+    // would mutate writes in unrelated projects.
+    const configFile = join(vault, "⚙️ Meta", "brain-config.json")
+    if (!existsSync(configFile)) {
+      console.warn(`[brain-vault] sin ${configFile}; este directorio no es un vault del paquete y el plugin queda inactivo`)
+      return
+    }
+
     const cfg = readConfig(vault)
 
     let dateFormatter
@@ -181,10 +194,14 @@ export default {
       })
     }
 
+    // Close signals must END the message and the message must be short:
+    // "buenas noches, empecemos" o "me voy a explicarte el bug" no son cierres.
+    // Longest-first: "eso es todo por hoy" antes que "eso es todo".
     const closeWords =
       cfg.language === "es"
-        ? /\b(chao|adi[oó]s|buenas noches|hasta ma[nñ]ana|nos vemos|eso es todo|eso es todo por hoy|gracias eso es todo|terminamos por hoy|cerramos por hoy|me voy)\b/i
-        : /\b(bye|good\s?night|see you|that'?s all|that is all|wrap up|we'?re done)\b/i
+        ? /(?:chao|adi[oó]s|buenas noches|hasta ma[nñ]ana|nos vemos|eso es todo por hoy|gracias eso es todo|eso es todo|terminamos por hoy|cerramos por hoy|me voy)\s*[.!?...]*\s*$/i
+        : /(?:bye|good\s?night|see you|that'?s all|that is all|wrap up|we'?re done)\s*[.!?...]*\s*$/i
+    const CLOSE_MAX_LENGTH = 400
     const meetingWords =
       cfg.language === "es"
         ? /\b(acabo de tener una (reuni[oó]n|llamada|junta)|tuve una (reuni[oó]n|llamada)|termin[oó] la (reuni[oó]n|llamada)|reuni[oó]n terminada)\b/i
@@ -225,17 +242,26 @@ export default {
     const sessionHook = typeof ctx?.session?.hook === "function" ? ctx.session.hook.bind(ctx.session) : null
     const toolHook = typeof ctx?.tool?.hook === "function" ? ctx.tool.hook.bind(ctx.tool) : null
 
+    // Each registration stands alone: a runtime rejecting one event name must
+    // not disable the other hooks.
     if (sessionHook) {
-      await sessionHook("context", (event) => {
-        if (Array.isArray(event?.system)) event.system.push({ type: "text", text: rules })
-      })
+      try {
+        await sessionHook("context", (event) => {
+          if (Array.isArray(event?.system)) event.system.push({ type: "text", text: rules })
+        })
 
-      await sessionHook("prompt", (event) => {
-        const text = String(event?.prompt?.text ?? "")
-        if (!text) return
-        if (meetingWords.test(text)) event.prompt.text = text + meetingNote
-        else if (closeWords.test(text)) event.prompt.text = text + closeNote
-      })
+        await sessionHook("prompt", (event) => {
+          const text = String(event?.prompt?.text ?? "").normalize("NFC")
+          if (!text) return
+          if (meetingWords.test(text)) {
+            event.prompt.text = text + meetingNote
+          } else if (text.length <= CLOSE_MAX_LENGTH && closeWords.test(text.trim())) {
+            event.prompt.text = text + closeNote
+          }
+        })
+      } catch (err) {
+        console.warn("[brain-vault] ctx.session.hook rechazó el registro; contexto y cierre inactivos: " + (err instanceof Error ? err.message : String(err)))
+      }
     } else {
       console.warn("[brain-vault] ctx.session.hook no está disponible; contexto y cierre inactivos")
     }
@@ -245,18 +271,25 @@ export default {
       return
     }
 
-    await toolHook("execute.before", (event) => {
-      const tool = String(event?.tool ?? "").toLowerCase()
-      if (!tool.includes("write")) return
-      const input = event.input
-      if (!input || typeof input.content !== "string" || !input.content.trim()) return
-      const path = String(input.filePath ?? input.file_path ?? input.path ?? input.file ?? "")
-      const rel = vaultRelative(vault, path)
-      if (!/\.(md|markdown)$/i.test(rel)) return
-      const type = noteType(rel)
-      if (!type) return
-      if (input.content.trimStart().startsWith("---")) return
-      input.content = `---\ntype: ${type}\ncreated: ${dateFormatter.format(new Date())}\n---\n\n` + input.content
-    })
+    try {
+      await toolHook("execute.before", (event) => {
+        const tool = String(event?.tool ?? "").toLowerCase()
+        if (!tool.includes("write")) return
+        const input = event.input
+        if (!input || typeof input.content !== "string" || !input.content.trim()) return
+        const path = String(input.filePath ?? input.file_path ?? input.path ?? input.file ?? "")
+        const rel = vaultRelative(vault, path)
+        if (!/\.(md|markdown)$/i.test(rel)) return
+        const type = noteType(rel)
+        if (!type) return
+        // Only NEW notes get frontmatter (COMPAT scope); overwrites of existing
+        // files are left exactly as the author wrote them.
+        if (existsSync(resolve(vault, rel))) return
+        if (FRONTMATTER_PATTERN.test(input.content.trimStart())) return
+        input.content = `---\ntype: ${type}\ncreated: ${dateFormatter.format(new Date())}\n---\n\n` + input.content
+      })
+    } catch (err) {
+      console.warn("[brain-vault] ctx.tool.hook rechazó el registro; frontmatter automático inactivo: " + (err instanceof Error ? err.message : String(err)))
+    }
   },
 }

@@ -15,6 +15,7 @@ count_record_links_for_n() {
   rl_log="$root/record-links.log"
   : > "$rl_log"
   mkdir -p "$bin" "$vault"
+  trap 'rm -rf "$root"' RETURN
 
   MOCK_UNAME=Linux
   MOCK_GIT_CALLS="$root/git-calls.log"
@@ -54,14 +55,12 @@ PYWRAP
   if ! bash "$PKG/install.sh" "$vault" >"$root/install.txt" 2>&1; then
     printf 'FAIL: install failed for N=%s\n' "$n" >&2
     cat "$root/install.txt" >&2
-    rm -rf "$root"
     return 1
   fi
 
   local count
   count="$(wc -l < "$rl_log" | tr -d ' ')"
   printf '%s' "$count"
-  rm -rf "$root"
 }
 
 C5="$(count_record_links_for_n 5)"
@@ -69,6 +68,12 @@ C20="$(count_record_links_for_n 20)"
 
 if [ -z "$C5" ] || [ -z "$C20" ]; then
   printf 'FAIL: could not measure record-links counts\n' >&2
+  exit 1
+fi
+
+# The batch must actually run: zero invocations means the wiring never happened.
+if [ "$C5" -lt 1 ]; then
+  printf 'FAIL: record-links was never invoked for N=5 (%s calls)\n' "$C5" >&2
   exit 1
 fi
 

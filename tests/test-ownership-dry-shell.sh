@@ -10,7 +10,7 @@ OWNERSHIP="$PKG/scripts/lib/ownership.py"
 [ -f "$OWNERSHIP" ] || { printf 'FAIL: missing %s\n' "$OWNERSHIP" >&2; exit 1; }
 
 # Canonical implementation must still own the fingerprint primitives.
-if ! grep -Eq 'sha256|st_mode|hashlib' "$OWNERSHIP"; then
+if ! grep -Eq 'hashlib\.sha256' "$OWNERSHIP"; then
   printf 'FAIL: scripts/lib/ownership.py no longer defines fingerprint primitives\n' >&2
   exit 1
 fi
@@ -30,11 +30,12 @@ done
 drift=0
 for script in "${SHELL_SCRIPTS[@]}"; do
   [ -f "$script" ] || continue
-  # Flag reimplementation markers outside comments that merely mention ownership.py.
-  if grep -nE 'sha256|st_mode|hashlib\.sha|file_info\s*=' "$script" \
+  # Flag reimplementation markers outside comments that merely mention ownership.py:
+  # python primitives, and any shell-side hashing tool (openssl/shasum/cksum/md5sum).
+  if grep -nE 'sha256|st_mode|hashlib\.sha|file_info\s*=|openssl dgst|shasum|cksum|md5sum' "$script" \
     | grep -Ev 'ownership\.py|^\s*#' >/dev/null 2>&1; then
     printf 'FAIL: ownership logic reimplemented in shell: %s\n' "${script#$PKG/}" >&2
-    grep -nE 'sha256|st_mode|hashlib\.sha|file_info\s*=' "$script" >&2 || true
+    grep -nE 'sha256|st_mode|hashlib\.sha|file_info\s*=|openssl dgst|shasum|cksum|md5sum' "$script" >&2 || true
     drift=1
   fi
 done

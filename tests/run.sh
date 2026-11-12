@@ -13,9 +13,12 @@ bash "$TEST_DIR/test-agents-schedule-appendix.sh"
 bash "$TEST_DIR/test-update-brain-floor-preserve.sh"
 bash "$TEST_DIR/test-journal-reminder-once.sh"
 bash "$TEST_DIR/test-install-unknown-flag.sh"
+bash "$TEST_DIR/test-install-flags.sh"
+bash "$TEST_DIR/test-python-fallback.sh"
 bash "$TEST_DIR/test-uninstall-a11-n4-n5.sh"
 bash "$TEST_DIR/test-uninstall-managed-copies.sh"
 bash "$TEST_DIR/test-t3-contract.sh"
+bash "$TEST_DIR/test-audit-karpathy.sh"
 
 if command -v node >/dev/null; then
   node "$TEST_DIR/test-plugin-contract.mjs" "$PKG"

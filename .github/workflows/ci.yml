@@ -32,6 +32,10 @@ jobs:
           node-version: "20"
       - name: Regression suite
         run: bash tests/run.sh
+      # macOS ships bash 3.2 as /bin/bash; the PATH bash on the runner is newer.
+      - name: Regression suite (macOS bash 3.2)
+        if: matrix.os == 'macos-latest'
+        run: /bin/bash tests/run.sh
       - name: Scheduler dry-run on the real platform
         run: |
           mkdir -p "$RUNNER_TEMP/vault/scripts/jobs"
@@ -41,6 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
       - name: shellcheck
         run: shellcheck -S warning install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh templates/jobs/*.sh
       - name: Python syntax (3.9, the documented minimum)

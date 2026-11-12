@@ -6,6 +6,9 @@
 # Flags:
 #   --config <archivo>   brain-config.json para sembrar (por defecto: templates/brain-config.example.json)
 #   --wire               solo re-cablea un vault existente (ruta de actualización)
+#   --update [vault]     actualiza este checkout del paquete con `git pull --ff-only`, solo si su remoto
+#                        origin es https://github.com/DragonJAR/ai-brain-opencode; con un vault, después lo
+#                        re-cablea como --wire (admite --with-schedule)
 #   --with-mcp           agrega los MCP remotos de scripts/lib/vault_layout.py: granola y chatprd
 #                        (opt-in: envían tu conversación cuando los usas)
 #   --with-obsidian      instala los complementos de Obsidian en el vault
@@ -21,11 +24,12 @@ set -euo pipefail
 unset CDPATH
 
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PACKAGE_REPO="https://github.com/DragonJAR/ai-brain-opencode"
 STARTER_REPO="https://github.com/mycelium-hq/ai-brain-starter"
 HUMANIZER_REPO="https://github.com/adelaidasofia/humanizer.git"
 LIB="$PKG/scripts/lib"
 OS="$(uname -s)"
-VAULT="" CONFIG="" WIRE=0 WITH_MCP=0 WITH_OBSIDIAN=0 WITH_SCHEDULE=0 DRY_RUN=0
+VAULT="" CONFIG="" WIRE=0 WITH_MCP=0 WITH_OBSIDIAN=0 WITH_SCHEDULE=0 DRY_RUN=0 UPDATE=0
 
 for required in common.sh python3.sh ownership.py wire.py brain_config.py vault_layout.py; do
   [ -f "$LIB/$required" ] || { printf '  ✗ paquete incompleto: falta scripts/lib/%s. No se modificó el vault\n' "$required" >&2; exit 1; }
@@ -38,6 +42,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --config) [ $# -ge 2 ] || usage_error "--config requiere la ruta de un brain-config.json"; CONFIG="$2"; shift 2 ;;
     --wire) WIRE=1; shift ;;
+    --update) UPDATE=1; shift ;;
     --yes|-y) shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --version) printf 'ai-brain-opencode %s\n' "$VERSION"; exit 0 ;;
@@ -49,6 +54,59 @@ while [ $# -gt 0 ]; do
     *) if [ -z "$VAULT" ]; then VAULT="$1"; else usage_error "argumento inesperado: $1"; fi; shift ;;
   esac
 done
+
+# package_origin_ok <url>: 0 si la URL es PACKAGE_REPO (https con o sin .git y / final,
+# o git@github.com:...). GitHub no distingue mayúsculas en usuario y repositorio.
+package_origin_ok() {
+  local url want
+  want="$(printf '%s' "${PACKAGE_REPO#https://}" | tr '[:upper:]' '[:lower:]')"
+  url="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  url="${url%/}"
+  url="${url%.git}"
+  case "$url" in
+    https://*) url="${url#https://}" ;;
+    git@github.com:*) url="github.com/${url#git@github.com:}" ;;
+    *) return 1 ;;
+  esac
+  [ "$url" = "$want" ]
+}
+
+# update_package: git pull --ff-only del checkout del paquete, solo desde PACKAGE_REPO.
+update_package() {
+  local cdup origin branch remote before after
+  command -v git >/dev/null || die "falta git (requerido para --update)"
+  cdup="$(git -C "$PKG" rev-parse --show-cdup 2>/dev/null)" && [ -z "$cdup" ] \
+    || die "--update: $PKG no es un checkout git del paquete; descarga la versión nueva desde $PACKAGE_REPO"
+  # get-url aplica url.<base>.insteadOf: es la dirección a la que git irá de verdad.
+  origin="$(git -C "$PKG" remote get-url origin 2>/dev/null)" || origin=""
+  package_origin_ok "$origin" \
+    || die "--update: el remoto origin (${origin:-ninguno}) no es $PACKAGE_REPO; solo se actualiza desde el repositorio oficial. No se actualizó nada"
+  branch="$(git -C "$PKG" symbolic-ref -q --short HEAD 2>/dev/null)" \
+    || die "--update: el checkout no está en una rama (HEAD suelto). No se actualizó nada"
+  remote="$(git -C "$PKG" config --get "branch.$branch.remote" 2>/dev/null || true)"
+  [ "$remote" = origin ] \
+    || die "--update: la rama $branch no sigue a origin (${remote:-sin upstream}); solo se actualiza desde $PACKAGE_REPO. No se actualizó nada"
+  [ -z "$(git -C "$PKG" status --porcelain --untracked-files=no 2>/dev/null)" ] \
+    || die "--update: el checkout tiene cambios locales; confírmalos o descártalos antes de actualizar. No se actualizó nada"
+  before="$VERSION ($(git -C "$PKG" rev-parse --short HEAD))"
+  git -C "$PKG" pull --ff-only \
+    || die "--update: git pull --ff-only falló (¿historia divergente o sin red?). No se actualizó nada"
+  after="$(cat "$PKG/VERSION" 2>/dev/null || echo desconocida) ($(git -C "$PKG" rev-parse --short HEAD))"
+  ok "paquete actualizado desde $PACKAGE_REPO: $before -> $after"
+}
+
+if [ "$UPDATE" = 1 ]; then
+  if [ "$WIRE" = 1 ] || [ "$DRY_RUN" = 1 ] || [ -n "$CONFIG" ] || [ "$WITH_MCP" = 1 ] || [ "$WITH_OBSIDIAN" = 1 ]; then
+    usage_error "--update solo admite la ruta de un vault y --with-schedule"
+  fi
+  if [ -n "$VAULT" ]; then [ -d "$VAULT" ] || die "--update: el vault no existe: $VAULT. No se actualizó nada"; fi
+  update_package
+  [ -n "$VAULT" ] || exit 0
+  # El install.sh nuevo hace el re-cableado: este proceso sigue leyendo el anterior.
+  if [ "$WITH_SCHEDULE" = 1 ]; then exec bash "$PKG/install.sh" "$VAULT" --wire --with-schedule; fi
+  exec bash "$PKG/install.sh" "$VAULT" --wire
+fi
+
 [ -n "$VAULT" ] || usage_error "falta la ruta del vault"
 if [ "$WIRE" = 1 ]; then
   [ -d "$VAULT" ] || die "--wire requiere la ruta de un vault existente"

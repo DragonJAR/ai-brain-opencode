@@ -5,7 +5,7 @@ LIB="$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 [ -f "$LIB" ] || { echo "falta scripts/lib/common.sh; re-ejecuta install.sh sobre este vault" >&2; exit 1; }
 # shellcheck source=/dev/null
 . "$LIB"
-job_init maintenance
+job_init
 
 if [ -f "⚙️ Meta/scripts/build-journal-index.py" ]; then
   run_python "⚙️ Meta/scripts/build-journal-index.py" --vault-root . >> "$LOG" 2>&1 || job_fail "falló build-journal-index"

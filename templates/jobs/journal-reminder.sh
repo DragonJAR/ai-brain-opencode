@@ -5,7 +5,7 @@ LIB="$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 [ -f "$LIB" ] || { echo "falta scripts/lib/common.sh; re-ejecuta install.sh sobre este vault" >&2; exit 1; }
 # shellcheck source=/dev/null
 . "$LIB"
-job_init journal-reminder
+job_init
 
 INFO="$(brain_config "$CFG" get vault_name journal.time 2>> "$LOG")" || job_fail "no se pudo leer brain-config.json"
 NAME=$(printf '%s\n' "$INFO" | sed -n '1p')

@@ -141,11 +141,12 @@ schedule_path() {
 
 # Cron lee minuto y luego hora. `%` es salto de línea para cron: se escapa.
 write_cron_lines() {
-  local marker="$1" index=0 jobs_dir="${J//%/\\%}"
+  local marker="$1" index=0 jobs_dir="${J//%/\\%}" log
   while [ "$index" -lt "${#JOB_NAMES[@]}" ]; do
-    printf "%s %s * * %s PATH='%s' /bin/bash \"%s/%s.sh\" %s\n" \
+    log="$(job_log_file "$VAULT" "${JOB_NAMES[$index]}")"
+    printf "%s %s * * %s PATH='%s' /bin/bash \"%s/%s.sh\" >> \"%s\" 2>&1 %s\n" \
       "$(pm "${JOB_TIMES[$index]}")" "$(hm "${JOB_TIMES[$index]}")" "${JOB_DAYS[$index]}" \
-      "$SCHEDULE_PATH" "$jobs_dir" "${JOB_NAMES[$index]}" "$marker"
+      "$SCHEDULE_PATH" "$jobs_dir" "${JOB_NAMES[$index]}" "${log//%/\\%}" "$marker"
     index=$((index + 1))
   done
 }
@@ -471,8 +472,8 @@ if [ "$OS" = "Darwin" ]; then
 <key>ProgramArguments</key><array><string>/bin/bash</string><string>$(xml_escape "$J/$job.sh")</string></array>
 <key>EnvironmentVariables</key><dict><key>PATH</key><string>$(xml_escape "$SCHEDULE_PATH")</string></dict>
 $(launchd_calendar "$time" "$(expand_days "$days")")
-<key>StandardOutPath</key><string>$(xml_escape "$VAULT/⚙️ Meta/logs/$job.log")</string>
-<key>StandardErrorPath</key><string>$(xml_escape "$VAULT/⚙️ Meta/logs/$job.log")</string>
+<key>StandardOutPath</key><string>$(xml_escape "$(job_log_file "$VAULT" "$job")")</string>
+<key>StandardErrorPath</key><string>$(xml_escape "$(job_log_file "$VAULT" "$job")")</string>
 </dict></plist>
 PL
     if ! plutil -lint "$plist" >/dev/null 2>&1; then

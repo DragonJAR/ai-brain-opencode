@@ -5,7 +5,7 @@ LIB="$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 [ -f "$LIB" ] || { echo "falta scripts/lib/common.sh; re-ejecuta install.sh sobre este vault" >&2; exit 1; }
 # shellcheck source=/dev/null
 . "$LIB"
-job_init insights-weekly
+job_init
 
 COUNT=$( { find "📓 Journals" -name '*.md' -not -name '.gitkeep' 2>/dev/null || true; } | wc -l | tr -d ' ')
 if [ "$COUNT" -lt 1 ]; then job_log "sin entradas; omitido"; exit 0; fi

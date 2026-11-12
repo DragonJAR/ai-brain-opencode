@@ -53,8 +53,13 @@ copy_new_floors() {
 }
 
 # --- Trabajos programados ------------------------------------------------------
-# job_init <nombre-del-log>: fija VAULT, LOG y PY3, rota el log y toma el
-# candado. Un trabajo que ya está corriendo no se solapa: el segundo sale con 0.
+# job_log_file <vault> <trabajo>: el único nombre de log de un trabajo. Lo usan
+# job_init y cada backend del scheduler, así la rotación cubre toda la salida.
+job_log_file() { printf '%s/⚙️ Meta/logs/%s.log' "$1" "$2"; }
+
+# job_init: fija VAULT, LOG y PY3, rota el log y toma el candado. El nombre del
+# trabajo es el del script que lo llama (scripts/jobs/<trabajo>.sh). Un trabajo
+# que ya está corriendo no se solapa: el segundo sale con 0.
 JOB_LOG_MAX_BYTES=1048576
 
 job_log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
@@ -66,13 +71,14 @@ job_fail() {
 }
 
 job_init() {
-  local name="$1" size pid
+  local name="${BASH_SOURCE[1]##*/}" size pid
+  name="${name%.sh}"
   VAULT="$(cd "$BRAIN_LIB_DIR/../.." && pwd -P)"
   cd "$VAULT" || exit 1
   # shellcheck disable=SC2034
   CFG="$VAULT/⚙️ Meta/brain-config.json"
   mkdir -p "$VAULT/⚙️ Meta/logs"
-  LOG="$VAULT/⚙️ Meta/logs/$name.log"
+  LOG="$(job_log_file "$VAULT" "$name")"
   if [ -f "$LOG" ]; then
     size="$(wc -c < "$LOG" | tr -d ' ')"
     if [ "${size:-0}" -gt "$JOB_LOG_MAX_BYTES" ]; then mv -f "$LOG" "${LOG%.log}.1.log"; fi

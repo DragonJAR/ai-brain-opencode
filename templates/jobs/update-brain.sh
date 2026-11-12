@@ -5,7 +5,7 @@ LIB="$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 [ -f "$LIB" ] || { echo "falta scripts/lib/common.sh; re-ejecuta install.sh sobre este vault" >&2; exit 1; }
 # shellcheck source=/dev/null
 . "$LIB"
-job_init update
+job_init
 R="$VAULT/.opencode/skills/ai-brain-starter"
 H="$VAULT/.opencode/skills/humanizer"
 

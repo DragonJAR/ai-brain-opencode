@@ -109,6 +109,19 @@ SH
   chmod +x "$bin/schtasks"
 }
 
+# plutil -lint that accepts every plist and keeps a copy in MOCK_PLUTIL_CAPTURE,
+# so a launchd --dry-run (which deletes its temporary plists) can be inspected.
+ai_brain_mock_plutil() {
+  local bin="$1"
+  mkdir -p "$bin"
+  cat > "$bin/plutil" <<'SH'
+#!/bin/sh
+if [ "${1:-}" = -lint ] && [ -n "${MOCK_PLUTIL_CAPTURE:-}" ]; then cp "$2" "$MOCK_PLUTIL_CAPTURE/"; fi
+exit 0
+SH
+  chmod +x "$bin/plutil"
+}
+
 ai_brain_mock_opencode() {
   local bin="$1"
   mkdir -p "$bin"

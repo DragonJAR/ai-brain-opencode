@@ -21,6 +21,8 @@ Actions:
     record-clone    <rel> <url>  record a vendor git clone by its origin
     adopt-clone     <rel> <url>  convert a legacy fingerprint record of a clone
     record-config   <json>       store MCP entries added to opencode.json
+    ensure-gitignore <vault>     create .gitignore or append the missing package lines
+    owned-paths                  print the package-owned vault paths, NUL-separated
     agent-matches   <path>       exit 1 unless a launch agent still matches
     record-agent    <path> <label>
     forget-agent    <path>       drop one launch agent record
@@ -81,6 +83,19 @@ MANAGED_DIRS = (".opencode/plugins/brain-vault", "scripts/lib", "scripts/jobs", 
 WIRED_DIRS = (".opencode/skills", ".opencode/commands", "⚙️ Meta/scripts")
 MCP_SERVERS = ("granola", "chatprd")
 MCP_RECORD_PREFIX = "opencode.json:mcp.servers."
+# Lines the vault .gitignore needs: an existing file is completed, never replaced.
+GITIGNORE_LINES = (
+    STARTER_REL + "/",
+    ".opencode/skills/humanizer/",
+    MANIFEST_REL,
+    ".obsidian/plugins/",
+    ".obsidian/workspace.json",
+    ".obsidian/workspace-mobile.json",
+    ".trash/",
+    ".DS_Store",
+    "⚙️ Meta/logs/*.log",
+    "⚙️ Meta/.probe-on",
+)
 
 
 class ManifestError(Exception):
@@ -317,6 +332,40 @@ def put_tree(data, vault, rel, src):
     shutil.copytree(src, dst, symlinks=True)
     data["trees"][rel] = tree_hash(dst)
     return None
+
+
+def ensure_gitignore(data, vault):
+    """Create .gitignore, or append the package lines an existing one lacks."""
+    target = safe_target(vault, ".gitignore")
+    if target.is_symlink() or (target.exists() and not target.is_file()):
+        return "symlink o ruta no regular preservada: .gitignore"
+    if not target.exists():
+        target.write_text("\n".join(GITIGNORE_LINES) + "\n", encoding="utf-8")
+        data["files"][".gitignore"] = file_info(target)
+        print("  + .gitignore")
+        return None
+    text = target.read_text(encoding="utf-8")
+    present = {line.strip() for line in text.splitlines()}
+    missing = [line for line in GITIGNORE_LINES if line not in present]
+    if not missing:
+        return None
+    try:
+        owned = data["files"].get(".gitignore") == file_info(target)
+    except ManifestError:
+        owned = False
+    prefix = "" if not text or text.endswith("\n") else "\n"
+    with open(target, "a", encoding="utf-8") as handle:
+        handle.write(prefix + "\n".join(missing) + "\n")
+    if owned:
+        data["files"][".gitignore"] = file_info(target)
+    print("  + .gitignore completado (%d líneas del paquete)" % len(missing))
+    return None
+
+
+def owned_paths(data):
+    """Paths the package wrote into the vault; vendor clones are not among them."""
+    paths = set(data["files"]) | set(data["symlinks"]) | set(data["trees"])
+    return sorted(rel for rel in paths if rel not in VENDOR_CLONES)
 
 
 # --- Vendor clones --------------------------------------------------------------
@@ -585,6 +634,15 @@ def dispatch(path, action, argv):
         finally:
             save(path, data)
         print(managed)
+    elif action == "ensure-gitignore":
+        reason = ensure_gitignore(data, argv[0])
+        if reason is not None:
+            warn(reason)
+            return PRESERVED
+        save(path, data)
+    elif action == "owned-paths":
+        for rel in owned_paths(data):
+            sys.stdout.write(rel + "\0")
     elif action == "install-link":
         reason = put_link(data, argv[0], relative(argv[1]), argv[2])
         if reason is not None:

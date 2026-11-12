@@ -198,6 +198,8 @@ wire_vendor() {
 }
 
 echo "== 1. Carpetas canónicas del vault =="
+# Paths this run wrote outside the manifest; only they (and the manifest's) enter the base commit.
+BASE_PATHS=()
 if [ "$WIRE" = 0 ]; then
   for d in "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "📝 Notes/Raw" "💼 Business/Engagements" "🚀 I+D/Herramientas" "🚀 I+D/Investigación" \
            "⚙️ Meta/Folder Resolvers" "⚙️ Meta/scripts" "⚙️ Meta/Sessions" "⚙️ Meta/Decisions" "⚙️ Meta/Workflows" \
@@ -208,9 +210,11 @@ if [ "$WIRE" = 0 ]; then
     fi
     if [ -L "$VAULT/$d/.gitkeep" ]; then
       warn "symlink .gitkeep preservado: $d/.gitkeep"
+      continue
     elif [ ! -f "$VAULT/$d/.gitkeep" ]; then
       : > "$VAULT/$d/.gitkeep"
     fi
+    BASE_PATHS+=("$d/.gitkeep")
   done
   ok "estructura creada"
 else
@@ -310,8 +314,10 @@ elif [ -n "$CONFIG" ]; then
   [ -f "$CONFIG" ] || die "no existe --config: $CONFIG"
   if [ -f "$BRC" ]; then cp "$BRC" "$BRC.bak.$(date +%Y%m%d-%H%M%S)" && warn "backup de la config previa"; fi
   cp "$CONFIG" "$BRC" && ok "config sembrada desde $CONFIG"
+  BASE_PATHS+=("⚙️ Meta/brain-config.json")
 elif [ ! -f "$BRC" ]; then
   brain_config "$BRC" seed "$SLUG" || die "no se pudo sembrar brain-config.json desde templates/brain-config.example.json"
+  BASE_PATHS+=("⚙️ Meta/brain-config.json")
 else
   ok "brain-config.json presente"
 fi
@@ -391,6 +397,7 @@ for what in missing:
     print("  ! la plantilla del vendor cambió: no se encontró '" + what + "'; revisa esa parte de AGENTS.md", file=sys.stderr)
 PYGEN
   [ -f "$VAULT/AGENTS.md" ] || die "fallo generando AGENTS.md"
+  BASE_PATHS+=("AGENTS.md")
   ok "AGENTS.md generado (plantilla + adaptación OpenCode)"
 fi
 if [ "$WIRE_MODE" = "copy" ]; then
@@ -441,22 +448,10 @@ else
     fi
     ok "git init (main)"
   fi
-  if [ ! -f "$VAULT/.gitignore" ]; then
-    cat > "$VAULT/.gitignore" <<'GI'
-.opencode/skills/ai-brain-starter/
-.opencode/skills/humanizer/
-.obsidian/plugins/
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
-.trash/
-.DS_Store
-⚙️ Meta/logs/*.log
-⚙️ Meta/.probe-on
-GI
-    ok ".gitignore"
-    owner_manifest record-file ".gitignore" "$VAULT/.gitignore" \
-      || warn "no se pudo registrar .gitignore"
-  fi
+  # Las líneas viven en ownership.py (GITIGNORE_LINES); un .gitignore existente solo se completa.
+  rc=0
+  owner_manifest ensure-gitignore "$VAULT" || rc=$?
+  case "$rc" in 0|3) ;; *) warn "no se pudo completar .gitignore" ;; esac
 fi
 
 if [ "$WITH_MCP" = 1 ]; then
@@ -464,6 +459,8 @@ if [ "$WITH_MCP" = 1 ]; then
   if [ -L "$VAULT/opencode.json" ]; then
     warn "opencode.json es un symlink; se preservó sin modificarlo"
   else
+    OPENCODE_EXISTED=0
+    if [ -e "$VAULT/opencode.json" ]; then OPENCODE_EXISTED=1; fi
     if ! MCP_ADDED="$(run_python - "$VAULT/opencode.json" 2>&1 <<'PY'
 import json, pathlib, sys
 p = pathlib.Path(sys.argv[1])
@@ -488,6 +485,7 @@ PY
       die "no se pudo configurar MCP en opencode.json: $MCP_ADDED"
     fi
     [ "$MCP_ADDED" = "{}" ] || owner_manifest record-config "$MCP_ADDED" || die "no se pudo registrar la configuración MCP"
+    if [ "$OPENCODE_EXISTED" = 0 ] && [ -f "$VAULT/opencode.json" ]; then BASE_PATHS+=("opencode.json"); fi
     ok "MCP remotos configurados sin sobrescribir entradas existentes"
   fi
 fi
@@ -556,24 +554,35 @@ elif [ ! -d "$VAULT/.git" ]; then
 elif [ -z "$(git -C "$VAULT" status --porcelain)" ]; then
   ok "sin cambios por confirmar"
 else
-  # Solo maquinaria del paquete y la estructura vacía: el contenido personal nunca entra.
+  # Solo lo que el paquete posee (manifiesto) y lo que esta ejecución creó: la
+  # configuración, los agentes y el contenido del usuario nunca entran.
+  CANDIDATES=()
+  while IFS= read -r -d '' path; do CANDIDATES+=("$path"); done < <(owner_manifest owned-paths)
+  CANDIDATES+=(${BASE_PATHS[@]+"${BASE_PATHS[@]}"})
+  # `git add` aborta con una ruta ignorada: lo que el .gitignore del usuario excluye se respeta.
+  IGNORED=$'\n'
+  if [ "${#CANDIDATES[@]}" -gt 0 ]; then
+    IGNORED="$IGNORED$(printf '%s\0' "${CANDIDATES[@]}" \
+      | git -C "$VAULT" check-ignore -z --stdin 2>/dev/null | tr '\0' '\n' || true)"$'\n'
+  fi
   GIT_ADD=()
-  for path in AGENTS.md CLAUDE.md .gitignore .opencode scripts opencode.json \
-              "⚙️ Meta/scripts" "⚙️ Meta/Floors" "⚙️ Meta/brain-config.json" "⚙️ Meta/journal-config.md"; do
+  for path in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
     [ -e "$VAULT/$path" ] || [ -L "$VAULT/$path" ] || continue
+    case "$IGNORED" in *$'\n'"$path"$'\n'*) continue ;; esac
     GIT_ADD+=("$path")
   done
-  for d in "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "💼 Business" "🚀 I+D" "⚙️ Meta"; do
-    [ -d "$VAULT/$d" ] || continue
-    while IFS= read -r keep; do GIT_ADD+=("${keep#"$VAULT"/}"); done < <(find "$VAULT/$d" -name .gitkeep -print)
-  done
-  git -C "$VAULT" add -- "${GIT_ADD[@]}"
-  if git -C "$VAULT" diff --cached --quiet -- "${GIT_ADD[@]}"; then
+  STAGED=()
+  if [ "${#GIT_ADD[@]}" -gt 0 ]; then
+    GIT_LITERAL_PATHSPECS=1 git -C "$VAULT" add -- "${GIT_ADD[@]}"
+    while IFS= read -r -d '' path; do STAGED+=("$path"); done \
+      < <(GIT_LITERAL_PATHSPECS=1 git -C "$VAULT" diff --cached --name-only -z -- "${GIT_ADD[@]}")
+  fi
+  if [ "${#STAGED[@]}" -eq 0 ]; then
     ok "sin cambios por confirmar"
   else
     # El pathspec limita el commit a estas rutas: lo que el usuario ya tuviera
     # en el index de un vault existente no entra en el commit base.
-    git -C "$VAULT" commit -q -m "chore: bootstrap ai-brain OpenCode vault" -- "${GIT_ADD[@]}"
+    GIT_LITERAL_PATHSPECS=1 git -C "$VAULT" commit -q -m "chore: bootstrap ai-brain OpenCode vault" -- "${STAGED[@]}"
     ok "commit base"
   fi
 fi

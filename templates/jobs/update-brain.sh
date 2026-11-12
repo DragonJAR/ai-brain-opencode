@@ -27,7 +27,7 @@ EOF
 if [ -f "$R/scripts/generate_floor_stubs.py" ]; then
   run_python "$R/scripts/generate_floor_stubs.py" >> "$LOG" 2>&1 || job_fail "falló generate_floor_stubs"
   if [ -d "$R/floors" ]; then
-    copied="$(copy_new_floors "$R/floors" "$VAULT/⚙️ Meta/Floors" 2>> "$LOG")" || job_fail "falló copia de notas de piso"
+    copied="$(copy_new_floors "$R/floors" "$VAULT/$BRAIN_FLOORS_REL" 2>> "$LOG")" || job_fail "falló copia de notas de piso"
     job_log "pisos: ${copied} nuevos; los existentes se preservan"
   else
     job_log "directorio floors ausente en starter; omitida copia"

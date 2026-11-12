@@ -241,7 +241,7 @@ def scan_vault(vault_dir: pathlib.Path) -> dict:
         except OSError:
             pass
 
-    raw_dir = vault_dir / "📝 Notes" / "Raw"
+    raw_dir = vault_dir.joinpath(*RAW_PREFIX.strip("/").split("/"))
     if raw_dir.is_dir():
         for f in raw_dir.rglob("*"):
             rel_raw = f.relative_to(raw_dir)

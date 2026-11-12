@@ -88,6 +88,26 @@ git_commit_paths() {
   git -c commit.gpgsign=false commit -q -m "$message" -- "${paths[@]}" < /dev/null
 }
 
+# sync_vendor_clone <ruta> <repositorio> <commit>: deja un clon del vendor en el
+# commit que fija el paquete (vault_layout.py). Nunca hace pull: el contenido de
+# terceros solo cambia cuando el paquete cambia el commit.
+# Sale con 0 si quedó en el commit, 3 si la ruta no es un clon de ese repositorio
+# (no se toca) y 1 si no se pudo traer o activar el commit.
+sync_vendor_clone() {
+  local path="$1" url="$2" commit="$3" origin
+  [ -e "$path/.git" ] || return 3
+  origin="$(git -C "$path" config --get remote.origin.url 2>/dev/null)" || origin=""
+  [ "$origin" = "$url" ] || return 3
+  [ "$(git -C "$path" rev-parse HEAD 2>/dev/null)" = "$commit" ] && return 0
+  git -C "$path" fetch -q --depth 1 origin "$commit" 2>/dev/null || return 1
+  git -C "$path" checkout -q --detach "$commit" 2>/dev/null
+}
+
+# vendor_lock: una línea "<ruta-en-vault>\t<repositorio>\t<commit>" por clon.
+vendor_lock() {
+  run_python "$BRAIN_LIB_DIR/vault_layout.py" vendor | tr -d '\r'
+}
+
 # --- Trabajos programados ------------------------------------------------------
 # job_log_file <vault> <trabajo>: el único nombre de log de un trabajo. Lo usan
 # job_init y cada backend del scheduler, así la rotación cubre toda la salida.

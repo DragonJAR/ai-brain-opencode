@@ -129,7 +129,7 @@ Con `--with-schedule` (launchd en macOS, cron en Linux, schtasks en Windows). Ca
 | `journal-reminder` | 20:30, lunes a viernes | Notificación de escritorio |
 | `insights-weekly` | 21:00, domingo | Ejecuta el insights semanal sin intervención |
 | `daily-maintenance` | 03:30, diario | Índice del diario y snapshot git de `snapshot_paths` |
-| `update-brain` | 08:00, lunes | Refresca los skills del starter y humanizer |
+| `update-brain` | 08:00, lunes | Mantiene los skills del starter y humanizer en las versiones que fija este paquete, y re-cablea |
 
 Míralos o quítalos con `bash scripts/schedule.sh <vault> --dry-run` / `--remove`.
 
@@ -143,8 +143,9 @@ El paquete se actualiza **solo** desde `https://github.com/DragonJAR/ai-brain-op
 `git pull --ff-only` en este checkout y re-cablea el vault. Se niega, sin cambiar nada, si `origin` es cualquier otro
 repositorio, si el checkout tiene cambios locales o si el pull no es fast-forward.
 
-Los skills del starter y humanizer son contenido de terceros, no la herramienta: el trabajo `update-brain` los
-refresca desde sus propios repositorios. Nunca toca el paquete.
+Nada más se actualiza por su cuenta. Los skills del starter y humanizer son contenido de terceros fijado a un commit
+en `scripts/lib/vault_layout.py`: el instalador y el trabajo `update-brain` activan ese commit y nunca hacen pull, así
+que una versión más nueva solo llega a tu vault con una actualización de este paquete.
 
 ## Desinstalación
 

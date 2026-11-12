@@ -214,6 +214,10 @@ MD
     printf 'unexpected clone URL: %s\n' "$url" >&2
     exit 91
   fi
+  # The stub remembers where it came from and which commit is checked out.
+  mkdir -p "$destination/.git"
+  printf '%s\n' "$url" > "$destination/.git/mock-origin"
+  printf 'mock-clone-head\n' > "$destination/.git/mock-head"
   exit 0
 fi
 # MOCK_GIT_REAL=<path to git>: only clone is stubbed; the vault repo is real.
@@ -227,6 +231,10 @@ if [ "${1:-}" = -C ]; then
   shift 2
   case "${1:-}" in
     log) printf 'deadbeef stub vendor\n'; exit 0 ;;
+    config) [ -f "$repo/.git/mock-origin" ] && cat "$repo/.git/mock-origin" && exit 0; exit 1 ;;
+    rev-parse) [ -f "$repo/.git/mock-head" ] && cat "$repo/.git/mock-head" && exit 0; exit 1 ;;
+    fetch) exit "${MOCK_GIT_FETCH_RC:-0}" ;;
+    checkout) printf '%s\n' "${@: -1}" > "$repo/.git/mock-head"; exit 0 ;;
     init) mkdir -p "${MOCK_VAULT:-$repo}/.git"; exit 0 ;;
     symbolic-ref) exit 0 ;;
     status)

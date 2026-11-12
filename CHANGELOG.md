@@ -8,6 +8,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 ### Cambiado
 - **README en inglés y español:** más cortos, ordenados por lo que hay que hacer (instalar, primeros pasos,
   comandos, configurar, actualizar).
+- **Contenido de terceros fijado:** el starter y humanizer quedan en un commit declarado en un solo lugar
+  (`VENDOR` en `scripts/lib/vault_layout.py`). El instalador y el trabajo semanal activan ese commit y ya no hacen
+  `pull` de repositorios ajenos: una versión nueva solo llega con una actualización del paquete, que sale únicamente
+  de su repositorio oficial. `BRAIN_STARTER_UPDATE=1` deja de existir; `BRAIN_STARTER_PIN=<sha>` sigue disponible
+  para probar otro commit del starter.
 
 ### Corregido
 - **`/diagnose` daba el vault por roto:** el del starter audita una instalación de Claude Code. El paquete trae

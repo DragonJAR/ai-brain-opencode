@@ -118,7 +118,8 @@ if bash "$COPY/install.sh" --update --with-mcp > /dev/null 2>&1; then fail "--up
 # 8. The scheduled update job never fetches the package itself.
 UPD="$PKG/templates/jobs/update-brain.sh"
 grep -Eq 'github\.com|git@' "$UPD" && fail "update-brain.sh references a package remote"
-[ "$(grep -c 'git .*pull' "$UPD")" = 1 ] || fail "update-brain.sh pulls more than the vendor clones (pull_clone)"
+# Nor does it pull the vendor clones: they follow the commits the package pins.
+[ "$(grep -c 'git .*pull' "$UPD")" = 0 ] || fail "update-brain.sh pulls a repository on its own"
 grep -q 'install.sh --update' "$UPD" || fail "update-brain.sh does not say the package updates with install.sh --update"
 
 if [ "$failures" -ne 0 ]; then

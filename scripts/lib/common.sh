@@ -3,6 +3,8 @@
 # trabajos programados. Se instala en <vault>/scripts/lib/ junto a python3.sh.
 # El llamador hace: . scripts/lib/common.sh
 
+# Con CDPATH, `cd dir` imprime la ruta y "$(cd dir && pwd)" devuelve dos líneas.
+unset CDPATH
 BRAIN_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=python3.sh
 . "$BRAIN_LIB_DIR/python3.sh"

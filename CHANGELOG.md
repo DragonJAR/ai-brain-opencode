@@ -31,6 +31,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   los clones del vendor se conserva mientras ellos sigan ahí.
 - **`--with-mcp` con JSONC:** un `opencode.json` con comentarios abortaba la instalación ya hecha, y junto a un
   `opencode.jsonc` se creaba una segunda configuración. Ahora se avisa y se omite el paso MCP sin tocar el archivo.
+- **Robustez del shell:** `install.sh`, `uninstall.sh` y `verify.sh` fallaban con `CDPATH` exportado; la
+  identidad git se comprobaba en el repo del directorio actual y no en el del vault; un `brain-config.json`,
+  `journal-config.md` o `AGENTS.md` que es symlink se escribía a través del enlace (ahora la instalación se rechaza
+  antes de tocar nada); un `cp` fallido ya no pasa en silencio.
+- **`verify.sh`:** el chequeo de cableado contaba los comandos del paquete y, en Windows, el clon de humanizer
+  como skill copiada; ahora cuenta solo lo cableado desde el starter. Los symlinks rotos se buscan también en
+  `⚙️ Meta/scripts` y en `CLAUDE.md`.
 - **Linux:** el recordatorio del diario busca el bus de sesión en `$XDG_RUNTIME_DIR` cuando está definido, antes de
   `/run/user/<uid>`.
 

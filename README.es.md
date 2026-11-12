@@ -85,6 +85,37 @@ El instalador copia el plugin a `<vault>/.opencode/plugins/brain-vault/index.js`
 | Disparador de reunión | Frases como «acabo de tener una reunión» |
 | Frontmatter automático en markdown nuevo | `type:` + `created:` según carpeta |
 
+## Comandos slash
+
+Los 17 comandos siguientes vienen de ai-brain-starter y el instalador los cablea a tu vault como
+`.opencode/commands/*.md` (symlinks relativos en macOS/Linux/WSL2, copias en Windows). Escríbelos en una
+sesión de OpenCode abierta sobre el vault; cada uno delega en su skill, que el instalador ya instaló
+— no hace falta ningún paso de bootstrap.
+
+| Comando | Qué hace |
+|---|---|
+| **Diario y reuniones** | |
+| `/daily-journal` | Entrevista de diario diario y creación de la entrada, con etiquetado de piso emocional |
+| `/insights` | Insights semanales o mensuales del diario: reconocimiento de patrones y feedback de panel |
+| `/meeting-todos` | Extraer action items de una nota de reunión y enrutarlos al archivo de tareas correcto |
+| `/cierre` | Terminó una llamada comercial: seguimiento completo — CRM, tareas, borrador de email, recordatorio, coaching |
+| **Vault y conocimiento** | |
+| `/diagnose` | Autodiagnóstico de la instalación (archivo de instrucciones, carpetas Meta, skills, hooks, MCPs) |
+| `/setup-vault-types` | Configurar qué tipos de documento usa tu vault y crear los extractores |
+| `/second-brain-mapping` | Mapear el vault: metadatos estructurados por archivo tipado, insights cruzados, grafo opcional |
+| `/graphify` | Convertir el vault en un grafo de conocimiento agrupado con salidas HTML y JSON |
+| `/optimize-brain` | Optimización profunda del vault: CRM, grafos, dashboards, compresión, wikilinks |
+| **Patrones e ideas** | |
+| `/patterns` | Escanear sesiones recientes en busca de patrones recurrentes y convertirlos en capturas (reglas, notas de concepto, semillas de escritura) |
+| `/deconstruct` | Analista de primeros principios: sacar supuestos ocultos, hallar verdades fundacionales, reconstruir |
+| `/evolve` | Agrupar instintos endurecidos en un comando / skill / agente propuesto (Instinct Engine) |
+| `/instinct-export` | Exportar la librería de instintos a un pack YAML portátil (Instinct Engine) |
+| `/instinct-import` | Importar un pack YAML de instintos con merge por umbrales de confianza (Instinct Engine) |
+| **Contenido** | |
+| `/humanizer` | Quitar los AI-isms de la prosa externa y reescribirla en tu voz real |
+| `/repurpose-talk` | Convertir una ponencia en 10–30 piezas de contenido |
+| `/nano-banana` | Generar o editar imágenes con el modelo Gemini Image de Google |
+
 ## Configuración
 
 Se siembra como `⚙️ Meta/brain-config.json` desde `templates/brain-config.example.json` (JSON estricto, no JSONC):

@@ -52,6 +52,34 @@ fi
 if ! grep -Fq 'No detecta vaults automáticamente ni modifica la configuración global de OpenCode.' "$PKG/README.es.md"; then
   fail "README.es.md does not state that setup is explicit and project-scoped"
 fi
+
+# Both READMEs must document the starter's slash commands (the 17 wired into .opencode/commands).
+EN_GROUPS=("Journal & meetings" "Vault & knowledge" "Patterns & ideas" "Content")
+ES_GROUPS=("Diario y reuniones" "Vault y conocimiento" "Patrones e ideas" "Contenido")
+check_readme_commands() {
+  local readme="$1"; shift
+  local label
+  for label in "$@"; do
+    if ! grep -Fq "**$label**" "$readme"; then
+      fail "$readme is missing the slash-command group '$label'"
+    fi
+  done
+  local command
+  for command in daily-journal insights meeting-todos cierre diagnose setup-vault-types \
+                 second-brain-mapping graphify optimize-brain patterns deconstruct evolve \
+                 instinct-export instinct-import humanizer repurpose-talk nano-banana; do
+    if ! grep -Fq "/$command" "$readme"; then
+      fail "$readme does not document /$command"
+    fi
+  done
+  local rows
+  rows=$(grep -c '^| `/' "$readme" || true)
+  if [ "$rows" -lt 17 ]; then
+    fail "$readme documents only $rows slash commands (expected the 17 wired by the installer)"
+  fi
+}
+check_readme_commands "$PKG/README.md" "${EN_GROUPS[@]}"
+check_readme_commands "$PKG/README.es.md" "${ES_GROUPS[@]}"
 if ! grep -Fq 'no realiza detección global' "$PKG/docs/COMPAT.md"; then
   fail "compatibility guide does not rule out global vault detection"
 fi

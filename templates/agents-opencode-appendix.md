@@ -33,7 +33,7 @@ Responde y escribe en {{LANGUAGE}}. Los nombres de carpeta quedan en inglés a p
 Los skills de `.opencode/skills/` vienen de ai-brain-starter y hablan de Claude Code. En este vault léelos así:
 - Una ruta de skills dentro de la carpeta personal de Claude Code es aquí `.opencode/skills/<skill>`; `CLAUDE.md` es este `AGENTS.md`.
 - Los hooks y el `settings.json` de Claude Code no existen aquí: su trabajo lo hace el plugin `brain-vault`. No los instales ni los reportes como faltantes.
-- La salud de la instalación se revisa con `bash scripts/verify.sh` y `/audit`; `/diagnose` es el chequeo del vendor y sus hallazgos sobre la instalación de Claude Code no aplican.
+- La salud de la instalación se revisa con `/diagnose` (el del paquete: `bash scripts/verify.sh` más `/audit`). El skill `diagnose` del starter audita una instalación de Claude Code: no lo uses aquí.
 - El instalador del vendor (skill `ai-brain-starter`) está oculto con una regla de permisos en `opencode.json`: no la quites.
 - Un skill que pida una clave o un programa externo (p. ej. `nano-banana`: clave de Gemini; `graphify`: su paquete de Python) lo dice antes de instalar nada.
 

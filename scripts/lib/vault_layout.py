@@ -78,6 +78,12 @@ MCP_SERVERS = {
 # Claude Code: loaded here it would re-run a setup this vault already has.
 DENIED_SKILLS = ("ai-brain-starter",)
 
+# Starter commands the package replaces with its own template of the same name
+# (templates/commands/<name>.md): wire.py does not copy the vendor version.
+# `diagnose` audits a Claude Code install (~/.claude, hooks, settings.json) and
+# reports this vault as broken; the package version runs verify.sh and audit.py.
+REPLACED_COMMANDS = ("diagnose",)
+
 
 def roots():
     """Top-level folders, in FOLDERS order."""

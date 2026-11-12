@@ -42,6 +42,18 @@ for prefix in layout.TYPED_FOLDERS + layout.ORPHAN_FOLDERS + tuple(p for p, _ in
         "prefix outside FOLDERS: " + prefix
 PY
 
+# 1b. The Vault Map written into AGENTS.md describes exactly the canonical roots.
+python3 - "$PKG/scripts/lib" "$PKG/install.sh" <<'PY' || fail "the Vault Map in install.sh drifted from vault_layout roots"
+import pathlib, re, sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[1])
+import vault_layout as layout
+text = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+block = re.search(r'vault_map = """(.*?)"""', text, re.S).group(1)
+described = re.findall(r"^- (.+?)/ — ", block, re.M)
+assert described == list(layout.roots()), "Vault Map: %s\nroots: %s" % (described, list(layout.roots()))
+PY
+
 # 2. The plugin's JS copy equals NOTE_TYPES, order included (first match wins).
 if command -v node >/dev/null; then
   python3 -c 'import json, sys; sys.path.insert(0, sys.argv[1]); import vault_layout as l; print(json.dumps(l.NOTE_TYPES, ensure_ascii=False))' \

@@ -33,7 +33,7 @@ mapea cada mecanismo, para saber qué está portado, qué se sustituyó y qué n
 
 | Hook/script CC | Sustituto |
 |---|---|
-| auto-update cada ~6 días al abrir sesión | trabajo programado semanal (`update-brain.sh`, ff-only) |
+| auto-update cada ~6 días al abrir sesión | trabajo programado semanal (`update-brain.sh`, ff-only) para el starter y humanizer; el paquete se actualiza a mano con `install.sh --update <vault>`, solo desde `https://github.com/DragonJAR/ai-brain-opencode` |
 | insights semanal/mensual (cron) | trabajo programado semanal con `opencode run --auto` (y `--archived` si existe) y gate por número de entradas; invoca `--command insights` si la CLI lo ofrece y, si no (OpenCode v2 no lo tiene y no interpreta `/insights` dentro del mensaje), nombra la skill `insights` |
 | daily job (ramas, worktrees, disco) | trabajo programado diario: índice del diario + snapshot git |
 | session-end-hook.sh (cascade) | protocolo de sesión en AGENTS.md + hook de prompt |
@@ -85,9 +85,10 @@ Cada pieza de lógica vive en un solo lugar de `scripts/lib/`, y `install.sh` co
 | Biblioteca | Responsabilidad única |
 |---|---|
 | `ownership.py` | Manifiesto: sellado, huellas, lista de rutas gestionadas, instalación que preserva lo ajeno, desinstalación e informe de deriva |
-| `wire.py` | Cableado del starter (symlinks en POSIX, copias en Windows) y poda de lo que el starter retiró; lo usan `install.sh` y `update-brain.sh` |
+| `wire.py` | Cableado del starter (skills y scripts: symlinks en POSIX, copias en Windows; comandos: siempre copias adaptadas a OpenCode, herramienta `skill` y rutas `.opencode/`) y poda de lo que el starter retiró; lo usan `install.sh` y `update-brain.sh` |
+| `vault_layout.py` | Carpetas del vault, tipo de nota por carpeta y servidores MCP remotos. El plugin mantiene una copia de los tipos que un test compara |
 | `brain_config.py` | Lectura de `brain-config.json`: valores por defecto, validación y fallback. El plugin (JavaScript) mantiene una copia de los valores por defecto que un test compara |
-| `common.sh` | Mensajes, detección de plataforma, intérprete Python y el arranque común de los trabajos (log con rotación, candado, timeout) |
+| `common.sh` | Mensajes, ayuda y errores de invocación de los scripts (`usage`, `usage_error`), detección de plataforma, intérprete Python y el arranque común de los trabajos (log con rotación, candado, timeout) |
 | `python3.sh` | Elección del intérprete (`python3`, `py -3`, `python`) en modo UTF-8 |
 
 Los trabajos programados salen de una única tabla en `scripts/schedule.sh` (nombre, clave del horario, días), de la

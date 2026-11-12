@@ -83,6 +83,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   `/run/user/<uid>`.
 
 ### Añadido
+- **`install.sh --update [vault]`:** actualiza el checkout del paquete con `git pull --ff-only` solo si su remoto
+  `origin` es `https://github.com/DragonJAR/ai-brain-opencode` (https con o sin `.git`, o `git@github.com:…`) y la
+  rama lo sigue; rechaza otro remoto, cambios locales o HEAD suelto sin tocar nada. Con un vault, después lo
+  re-cablea como `--wire`. El trabajo semanal `update-brain` sigue actualizando solo el starter y humanizer. El
+  control de datos personales trata esa URL (y la forma SSH `git@host:`) como atribución publicada.
 - `tests/run.sh` descubre también `tests/test-*.mjs`; regresiones para la salida UTF-8 de `/audit`, el bus de
   `notify-send`, la limpieza de `AGENTS.md` y el aviso falso de symlink al reinstalar.
 - **Comandos del starter en OpenCode:** se enlazaban tal cual y pedían usar "the Skill tool" (de Claude Code) y

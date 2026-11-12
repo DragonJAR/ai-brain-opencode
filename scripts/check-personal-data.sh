@@ -11,7 +11,7 @@
 # Un código >=2 es un error: el paquete no se declara limpio.
 #
 # No se escanean directorios que no se distribuyen: .atl/, odd/, __pycache__/.
-# Los correos de ejemplo (example.com/org/net y *.invalid) no son datos del operador.
+# Los correos de ejemplo (example.com/org/net y *.invalid) no son datos del operador, ni un remoto SSH (git@host:).
 # La atribución publicada de README.md y README.es.md no entra en los nombres propios.
 # Los binarios se leen como texto (grep -a): un correo dentro de un PNG también es una fuga.
 set -uo pipefail
@@ -63,7 +63,8 @@ keep_structural() {
     [ -n "$line" ] || continue
     scrubbed="$(printf '%s\n' "$line" | sed -E \
       -e 's/[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)*example\.(com|org|net)//g' \
-      -e 's/[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)*[A-Za-z0-9-]+\.invalid//g')"
+      -e 's/[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)*[A-Za-z0-9-]+\.invalid//g' \
+      -e 's/(^|[^A-Za-z0-9._%+-])git@[A-Za-z0-9.-]+:/\1/g')"
     if printf '%s\n' "$scrubbed" | grep -qE "$STRUCT_RE"; then
       printf '%s\n' "$line"
     fi
@@ -115,8 +116,9 @@ else
   BAD=1
 fi
 
-# Las URL de los clones del vendor nombran a sus autores: es atribución, no un dato del operador.
-VENDOR_URL_RE='(https?://)?github\.com/(mycelium-hq/ai-brain-starter|adelaidasofia/humanizer)(\.git)?'
+# Las URL publicadas (clones del vendor y el repositorio del paquete, del que `install.sh --update`
+# actualiza) nombran a sus autores: es atribución, no un dato del operador.
+VENDOR_URL_RE='((https?://)?github\.com/|git@github\.com:)(mycelium-hq/ai-brain-starter|adelaidasofia/humanizer|DragonJAR/ai-brain-opencode)(\.git)?'
 
 echo "== Chequeo de nombres propios =="
 TERMS_FILE="${BRAIN_PERSONAL_TERMS:-$HOME/.config/ai-brain/personal-terms.txt}"

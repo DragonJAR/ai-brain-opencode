@@ -217,7 +217,11 @@ MD
   exit 0
 fi
 # MOCK_GIT_REAL=<path to git>: only clone is stubbed; the vault repo is real.
-if [ -n "${MOCK_GIT_REAL:-}" ]; then exec "$MOCK_GIT_REAL" "$@"; fi
+# MOCK_GIT_PULL_RC=<code>: `pull` is stubbed too (no network) and exits with it.
+if [ -n "${MOCK_GIT_REAL:-}" ]; then
+  case " $* " in *" pull "*) [ -z "${MOCK_GIT_PULL_RC:-}" ] || exit "$MOCK_GIT_PULL_RC" ;; esac
+  exec "$MOCK_GIT_REAL" "$@"
+fi
 if [ "${1:-}" = -C ]; then
   repo="$2"
   shift 2

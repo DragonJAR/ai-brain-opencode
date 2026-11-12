@@ -72,6 +72,19 @@ printf 'HUMANIZER_REPO="https://github.com/adelaidasofia/humanizer.git"\n' > "$P
 printf 'adelaidasofia\n' > "$TMP_ROOT/terms-vendor.txt"
 gate "$P" "$TMP_ROOT/terms-vendor.txt" || fail "the vendor clone URL was flagged as personal data"
 
+# 5. The package's own published URL (install.sh --update) is exempt; its owner's bare name is not.
+PACKAGE_URL="https://github.com/DragonJAR/ai-brain-opencode"
+OWNER="${PACKAGE_URL#https://github.com/}"
+printf '%s\n' "${OWNER%%/*}" > "$TMP_ROOT/terms-owner.txt"
+P="$TMP_ROOT/pkg-own-url"
+clean_pkg "$P"
+printf 'PACKAGE_REPO="%s"\nssh: git@github.com:%s.git\n' "$PACKAGE_URL" "$OWNER" > "$P/install.sh"
+gate "$P" "$TMP_ROOT/terms-owner.txt" || fail "the package's own repository URL was flagged as personal data"
+printf 'made by %s\n' "${OWNER%%/*}" > "$P/notes.md"
+if gate "$P" "$TMP_ROOT/terms-owner.txt"; then
+  fail "the owner's name outside the repository URL was not flagged"
+fi
+
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: personal data gate had %s failures\n' "$failures" >&2
   exit 1

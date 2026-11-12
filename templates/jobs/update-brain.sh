@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Actualiza el starter y humanizer (ff-only), regenera los pisos y re-cablea.
+# No actualiza el paquete ai-brain-opencode: eso lo hace a mano `bash install.sh --update <vault>`
+# desde su checkout, y solo desde el repositorio oficial.
 set -euo pipefail
 LIB="$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 [ -f "$LIB" ] || { echo "falta scripts/lib/common.sh; re-ejecuta install.sh sobre este vault" >&2; exit 1; }

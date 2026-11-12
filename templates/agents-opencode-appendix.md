@@ -26,8 +26,16 @@ Responde y escribe en {{LANGUAGE}}. Los nombres de carpeta quedan en inglés a p
 ### Sesión
 - Inicio: lee este archivo y `⚙️ Meta/Sessions/` (última sesión).
 - Cierre: el plugin `brain-vault` detecta la señal de cierre ("chao", "eso es todo"...) e inyecta el cascade: guarda `⚙️ Meta/Sessions/<fecha-hora>.md`, registra decisiones en `⚙️ Meta/Decisions/` y compromete solo las rutas tocadas.
-- Configuración personal: `/setup-brain` (la entrevista del paquete). El skill `ai-brain-starter` del vendor es su instalador para Claude Code: no lo cargues en este vault.
-- Verificación: `bash scripts/verify.sh` y auditoría de integridad `python3 scripts/audit.py .` (o `/audit`).
+- Configuración personal: `/setup-brain` (la entrevista del paquete).
+- Verificación: `bash scripts/verify.sh` y auditoría de integridad `python3 scripts/audit.py .` (o `/audit`; en Windows el intérprete puede ser `py -3`).
+
+### Skills del starter (escritos para Claude Code)
+Los skills de `.opencode/skills/` vienen de ai-brain-starter y hablan de Claude Code. En este vault léelos así:
+- Una ruta de skills dentro de la carpeta personal de Claude Code es aquí `.opencode/skills/<skill>`; `CLAUDE.md` es este `AGENTS.md`.
+- Los hooks y el `settings.json` de Claude Code no existen aquí: su trabajo lo hace el plugin `brain-vault`. No los instales ni los reportes como faltantes.
+- La salud de la instalación se revisa con `bash scripts/verify.sh` y `/audit`; `/diagnose` es el chequeo del vendor y sus hallazgos sobre la instalación de Claude Code no aplican.
+- El instalador del vendor (skill `ai-brain-starter`) está oculto con una regla de permisos en `opencode.json`: no la quites.
+- Un skill que pida una clave o un programa externo (p. ej. `nano-banana`: clave de Gemini; `graphify`: su paquete de Python) lo dice antes de instalar nada.
 
 ### Scheduler (si se instaló con `--with-schedule`)
 Los horarios salen de `⚙️ Meta/brain-config.json`; los días son fijos y el sistema operativo dispara los

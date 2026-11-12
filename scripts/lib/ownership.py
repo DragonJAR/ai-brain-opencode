@@ -20,7 +20,10 @@ Actions:
     record-file     <rel> <path> store the fingerprint of a file the installer wrote
     record-clone    <rel> <url>  record a vendor git clone by its origin
     adopt-clone     <rel> <url>  convert a legacy fingerprint record of a clone
-    record-config   <json>       store MCP entries added to opencode.json
+    configure       <vault> <mcp 0|1>
+                                 add the package entries to opencode.json (the deny
+                                 rule for vendor skills; the MCP servers if asked);
+                                 print created|updated|unchanged, exit 3 if skipped
     ensure-gitignore <vault>     create .gitignore or append the missing package lines
     owned-paths                  print the package-owned vault paths, NUL-separated
     agent-matches   <path>       exit 1 unless a launch agent still matches
@@ -91,6 +94,9 @@ MANAGED_DIRS = (".opencode/plugins/brain-vault", "scripts/lib", "scripts/jobs", 
 WIRED_DIRS = (".opencode/skills", ".opencode/commands", "⚙️ Meta/scripts")
 MCP_SERVERS = tuple(vault_layout.MCP_SERVERS)
 MCP_RECORD_PREFIX = "opencode.json:mcp.servers."
+SKILL_DENY_PREFIX = "opencode.json:permissions.skill."
+CONFIG_CREATED = "opencode.json:created"
+OPENCODE_SCHEMA = "https://opencode.ai/config.json"
 # Lines the vault .gitignore needs: an existing file is completed, never replaced.
 GITIGNORE_LINES = (
     STARTER_REL + "/",
@@ -527,6 +533,122 @@ def drift(data, vault):
     return findings
 
 
+# --- opencode.json ---------------------------------------------------------------
+# The package adds two kinds of entries and records each one, so the uninstall
+# removes exactly what it added and nothing the user wrote or changed.
+
+class ConfigSkipped(Exception):
+    """opencode.json was left alone; str() is the reason for the user."""
+
+
+def skill_deny_rule(skill_id):
+    return {"action": "skill", "resource": skill_id, "effect": "deny"}
+
+
+def read_opencode_config(vault):
+    """(path, config or None if absent). Raises ConfigSkipped when it must not be touched."""
+    path = pathlib.Path(vault) / "opencode.json"
+    jsonc = pathlib.Path(vault) / "opencode.jsonc"
+    if path.is_symlink():
+        raise ConfigSkipped("opencode.json es un symlink; se preservó sin modificarlo")
+    if jsonc.exists() or jsonc.is_symlink():
+        raise ConfigSkipped("existe opencode.jsonc: no se crea una segunda configuración")
+    if not path.exists():
+        return path, None
+    if not path.is_file() or path.stat().st_nlink != 1:
+        raise ConfigSkipped("opencode.json no es un archivo regular o tiene varios enlaces duros")
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        raise ConfigSkipped("opencode.json no es JSON estricto (¿comentarios o comas finales?)")
+    if not isinstance(config, dict):
+        raise ConfigSkipped("la raíz de opencode.json no es un objeto")
+    return path, config
+
+
+def configure(data, vault, with_mcp):
+    """Add the package entries to opencode.json; returns created|updated|unchanged."""
+    path, config = read_opencode_config(vault)
+    created = config is None
+    if created:
+        config = {"$schema": OPENCODE_SCHEMA}
+    changed = False
+    rules = config.get("permissions", [])
+    if not isinstance(rules, list):
+        raise ConfigSkipped("`permissions` de opencode.json no es una lista")
+    for skill_id in vault_layout.DENIED_SKILLS:
+        rule = skill_deny_rule(skill_id)
+        if rule not in rules:
+            rules.append(rule)
+            config["permissions"] = rules
+            data["config"][SKILL_DENY_PREFIX + skill_id] = rule
+            changed = True
+    if with_mcp:
+        mcp = config.get("mcp", {})
+        servers = mcp.get("servers", {}) if isinstance(mcp, dict) else None
+        if not isinstance(servers, dict):
+            raise ConfigSkipped("`mcp.servers` de opencode.json no es un objeto")
+        for name, url in vault_layout.MCP_SERVERS.items():
+            if name not in servers:
+                servers[name] = {"type": "remote", "url": url}
+                mcp["servers"] = servers
+                config["mcp"] = mcp
+                data["config"][MCP_RECORD_PREFIX + name] = servers[name]
+                changed = True
+    if not changed:
+        return "unchanged"
+    if created:
+        data["config"][CONFIG_CREATED] = True
+    path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return "created" if created else "updated"
+
+
+def unconfigure(data, vault, dry_run, gone):
+    """Remove the recorded entries that are still exactly as the package wrote them."""
+    try:
+        path, config = read_opencode_config(vault)
+    except ConfigSkipped:
+        print("  ! no se pudo verificar opencode.json; configuración preservada")
+        return
+    if config is None:
+        return
+    try:
+        mcp = config.get("mcp", {})
+        servers = mcp.get("servers", {}) if isinstance(mcp, dict) else {}
+        rules = config.get("permissions", [])
+        if not isinstance(servers, dict) or not isinstance(rules, list):
+            raise ValueError("unexpected shape")
+        changed = False
+        for record, expected in data["config"].items():
+            if record.startswith(MCP_RECORD_PREFIX) and record[len(MCP_RECORD_PREFIX):] in MCP_SERVERS:
+                name = record[len(MCP_RECORD_PREFIX):]
+                if servers.get(name) == expected:
+                    del servers[name]
+                    changed = True
+                    print("  " + gone + " entrada MCP sin cambios " + name)
+                elif name in servers:
+                    print("  ! entrada MCP modificada, preservada: " + name)
+            elif record.startswith(SKILL_DENY_PREFIX) and expected in rules:
+                rules.remove(expected)
+                changed = True
+                print("  " + gone + " regla que oculta el skill " + record[len(SKILL_DENY_PREFIX):])
+        if not changed or dry_run:
+            return
+        if isinstance(mcp, dict) and not servers:
+            mcp.pop("servers", None)
+        if not mcp:
+            config.pop("mcp", None)
+        if not rules:
+            config.pop("permissions", None)
+        # A file the package created and that holds nothing else goes with it.
+        if data["config"].get(CONFIG_CREATED) is True and config == {"$schema": OPENCODE_SCHEMA}:
+            path.unlink()
+        else:
+            path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except (OSError, ValueError, TypeError, AttributeError):
+        print("  ! no se pudo verificar opencode.json; configuración preservada")
+
+
 # --- Uninstall ------------------------------------------------------------------
 
 def load_for_uninstall(manifest, vault):
@@ -599,39 +721,7 @@ def uninstall(manifest, vault, purge, dry_run):
         if is_managed_file(value) and value != ".gitignore":
             remove_file(value, expected)
 
-    config_path = vault / "opencode.json"
-    if not config_path.is_symlink() and config_path.is_file():
-        try:
-            if config_path.stat().st_nlink != 1:
-                raise ValueError("opencode.json has multiple hard links")
-            config = json.loads(config_path.read_text(encoding="utf-8"))
-            if not isinstance(config, dict):
-                raise ValueError("opencode.json root is not an object")
-            mcp = config.get("mcp", {})
-            if not isinstance(mcp, dict):
-                raise ValueError("mcp configuration is not an object")
-            servers = mcp.get("servers", {})
-            if not isinstance(servers, dict):
-                raise ValueError("mcp.servers is not an object")
-            config_changed = False
-            for record, expected in data["config"].items():
-                name = record[len(MCP_RECORD_PREFIX):]
-                if not record.startswith(MCP_RECORD_PREFIX) or name not in MCP_SERVERS:
-                    continue
-                if servers.get(name) == expected:
-                    del servers[name]
-                    config_changed = True
-                    print("  " + gone + " entrada MCP sin cambios " + name)
-                elif name in servers:
-                    print("  ! entrada MCP modificada, preservada: " + name)
-            if config_changed and not dry_run:
-                if not servers:
-                    mcp.pop("servers", None)
-                if not mcp:
-                    config.pop("mcp", None)
-                config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        except (OSError, ValueError, TypeError, AttributeError):
-            print("  ! no se pudo verificar opencode.json; configuración preservada")
+    unconfigure(data, vault, dry_run, gone)
 
     def remove_tree(value, noun, unchanged):
         try:
@@ -771,10 +861,15 @@ def dispatch(path, action, argv):
             data["clones"][relative(argv[0])] = argv[1]
             del data["trees"][argv[0]]
             save(path, data)
-    elif action == "record-config":
-        for name, value in json.loads(argv[0]).items():
-            data["config"][MCP_RECORD_PREFIX + name] = value
-        save(path, data)
+    elif action == "configure":
+        try:
+            status = configure(data, argv[0], argv[1] == "1")
+        except ConfigSkipped as skipped:
+            warn(str(skipped))
+            return PRESERVED
+        if status != "unchanged":
+            save(path, data)
+        print(status)
     elif action == "agent-matches":
         entry = data["launch_agents"].get(argv[0])
         if entry is None or not _file_matches(entry.get("file"))(argv[0]):

@@ -55,10 +55,10 @@ Repetirlo es seguro: tu contenido nunca se sobrescribe.
 | `/setup-brain` | Personaliza `AGENTS.md` y la config |
 | `/ingest` | Compila las fuentes de `📝 Notes/Raw/` en notas enlazadas; la fuente queda intacta |
 | `/audit` | Wikilinks rotos, notas huérfanas, notas sin tipo, fuentes pendientes |
-| `/diagnose` | Autochequeo de la instalación |
+| `/diagnose` | Autochequeo del starter (escrito para Claude Code; para este vault usa `verify.sh` y `/audit`) |
 | `/setup-vault-types` | Elige los tipos de documento que usa tu vault |
 | `/second-brain-mapping` | Metadatos estructurados y hallazgos entre documentos |
-| `/graphify` | Grafo de conocimiento del vault (HTML y JSON) |
+| `/graphify` | Grafo de conocimiento del vault (HTML y JSON); instala el paquete de Python `graphify` |
 | `/optimize-brain` | Limpieza profunda: CRM, grafos, tableros, wikilinks |
 | **Patrones e ideas** | |
 | `/patterns` | Patrones recurrentes de tus sesiones, convertidos en reglas y notas |
@@ -71,10 +71,13 @@ Repetirlo es seguro: tu contenido nunca se sobrescribe.
 | `/create` | Redacta contenido desde el contexto del vault, con tu voz |
 | `/humanizer` | Quita los vicios de IA de un texto |
 | `/repurpose-talk` | Convierte una charla en 10–30 piezas de contenido |
-| `/nano-banana` | Genera o edita imágenes con Gemini |
+| `/nano-banana` | Genera o edita imágenes con Gemini; necesita tu clave de API de Gemini |
 
 El plugin también trabaja sin comandos: agrega tus reglas a cada turno, guarda la sesión cuando te despides, ofrece
 el flujo de reuniones cuando mencionas una y pone el tipo a las notas nuevas según su carpeta.
+
+Los skills del starter se escribieron para Claude Code. `AGENTS.md` le indica al modelo cómo leerlos aquí, y el
+skill instalador del propio starter queda oculto con una regla de permisos en el `opencode.json` del vault.
 
 ## Configuración
 

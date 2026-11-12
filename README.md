@@ -54,10 +54,10 @@ Running it again is safe: your content is never overwritten.
 | `/setup-brain` | Personalize `AGENTS.md` and the config |
 | `/ingest` | Compile sources in `📝 Notes/Raw/` into linked notes; the source stays untouched |
 | `/audit` | Broken wikilinks, orphan notes, untyped notes, pending sources |
-| `/diagnose` | Self-check of the install |
+| `/diagnose` | The starter's self-check (written for Claude Code; for this vault prefer `verify.sh` and `/audit`) |
 | `/setup-vault-types` | Choose the document types your vault uses |
 | `/second-brain-mapping` | Structured metadata and cross-document insights |
-| `/graphify` | Knowledge graph of the vault (HTML and JSON) |
+| `/graphify` | Knowledge graph of the vault (HTML and JSON); installs the `graphify` Python package |
 | `/optimize-brain` | Deep clean-up: CRM, graphs, dashboards, wikilinks |
 | **Patterns & ideas** | |
 | `/patterns` | Recurring patterns in recent sessions, turned into rules and notes |
@@ -70,10 +70,13 @@ Running it again is safe: your content is never overwritten.
 | `/create` | Draft content from vault context, in your voice |
 | `/humanizer` | Strip AI-isms from a text |
 | `/repurpose-talk` | Turn a talk into 10–30 pieces of content |
-| `/nano-banana` | Generate or edit images with Gemini |
+| `/nano-banana` | Generate or edit images with Gemini; needs your Gemini API key |
 
 The plugin also works without commands: it adds your rules to every turn, saves the session when you say goodbye,
 offers the meeting workflow when you mention a meeting, and types new notes by folder.
+
+The starter skills were written for Claude Code. `AGENTS.md` tells the model how to read them here, and the
+starter's own installer skill is hidden with a permission rule in the vault's `opencode.json`.
 
 ## Configuration
 

@@ -20,8 +20,16 @@ for f in "$PKG"/templates/commands/*.md; do
   fi
 done
 
+# OpenCode v2 `opencode run` sends its message as plain text, so a slash command
+# there never runs; no template or doc may tell the user otherwise.
+SLASH_RUN="$(grep -RInE "opencode run( --?[A-Za-z-]+)* [\"']/" "$PKG/templates" "$PKG/docs" "$PKG"/README*.md || true)"
+if [ -n "$SLASH_RUN" ]; then
+  printf 'FAIL: a template or doc tells the user to run a slash command with opencode run:\n%s\n' "$SLASH_RUN" >&2
+  failures=$((failures + 1))
+fi
+
 if [ "$failures" -ne 0 ]; then
-  printf 'FAIL: %s package command templates without a description\n' "$failures" >&2
+  printf 'FAIL: %s package command template or doc problems\n' "$failures" >&2
   exit 1
 fi
-printf 'PASS: package slash commands declare an OpenCode description\n'
+printf 'PASS: package slash commands declare an OpenCode description; no doc runs one through opencode run\n'

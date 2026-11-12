@@ -113,7 +113,6 @@ try {
     ["⚙️ Meta/Sessions/2026-11-10-0900.md", "session"],
     ["⚙️ Meta/Decisions/2026-11-10.md", "decision"],
     ["📝 Notes/idea.md", "note"],
-    ["📝 Notes/Raw/fuente.md", "raw"],
   ]
   const hook = hooks["execute.before"][0]
   for (const [rel, type] of cases) {
@@ -122,6 +121,10 @@ try {
     ok(event.input.content.startsWith("---\ntype: " + type), `frontmatter type=${type} para ${rel}`)
     ok(/^---\ntype: [a-z]+\ncreated: \d{4}-\d{2}-\d{2}\n---\n\n# hola$/.test(event.input.content), `frontmatter bien formado para ${rel}`)
   }
+
+  const raw = { tool: "write", input: { filePath: join(vault, "📝 Notes", "Raw", "fuente.md"), content: "# fuente" } }
+  await hook(raw)
+  ok(raw.input.content === "# fuente", "una fuente nueva en 📝 Notes/Raw/ se guarda intacta (inmutable)")
 
   const outside = { tool: "write", input: { filePath: join(root, "otro-lugar", "nota.md"), content: "# fuera" } }
   await hook(outside)

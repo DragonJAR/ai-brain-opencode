@@ -144,7 +144,8 @@ const FOLDER_TYPES = [
   ["⚙️ Meta/Decisions/", "decision"],
   ["⚙️ Meta/", "note"],
   ["🏠 Home/", "note"],
-  ["📝 Notes/Raw/", "raw"],
+  // Raw sources are immutable: an empty type leaves them untouched.
+  ["📝 Notes/Raw/", ""],
   ["📝 Notes/", "note"],
   ["💼 Business/", "note"],
   ["🚀 I+D/", "note"],

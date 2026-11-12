@@ -55,6 +55,20 @@ for target in user-docs-missing user-templates-missing user-tests-missing; do
   grep -Fq "\"$target\"" "$TMP_ROOT/user-dirs.json" || fail "broken link [[$target]] in a user folder was not reported"
 done
 
+# 3. 📝 Notes/Raw/ holds immutable sources: no frontmatter type is required,
+#    they are not orphans, and they stay in the pending-ingest queue.
+rm -rf "$VAULT/📝 Notes/docs" "$VAULT/📝 Notes/templates" "$VAULT/📝 Notes/tests"
+printf '# A source kept exactly as received\n' > "$VAULT/📝 Notes/Raw/fuente.md"
+audit_json "$VAULT" > "$TMP_ROOT/raw.json"
+read -r broken untyped < <(criticals < "$TMP_ROOT/raw.json")
+[ "$untyped" = 0 ] || fail "an untyped source in 📝 Notes/Raw/ is reported as a critical"
+python3 - "$TMP_ROOT/raw.json" <<'PY' || fail "a Raw source is an orphan or left the pending-ingest queue"
+import json, sys
+r = json.load(open(sys.argv[1], encoding="utf-8"))
+assert "📝 Notes/Raw/fuente.md" in r["pending_raw"], r["pending_raw"]
+assert not any(p.startswith("📝 Notes/Raw/") for p in r["orphan_notes"]), r["orphan_notes"]
+PY
+
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: audit scope had %s failed assertions\n' "$failures" >&2
   exit 1

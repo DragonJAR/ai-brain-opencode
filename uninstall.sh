@@ -14,7 +14,6 @@ LIB="$PKG/scripts/lib"
   || { printf '  ✗ paquete incompleto: faltan archivos en scripts/lib\n' >&2; exit 1; }
 # shellcheck source=scripts/lib/common.sh
 . "$LIB/common.sh"
-usage() { sed -n '2,/^set -/p' "$0" | sed '$d'; }
 
 VAULT=""
 PURGE=0
@@ -24,17 +23,17 @@ while [ $# -gt 0 ]; do
     --help|-h) usage; exit 0 ;;
     --purge-clones) PURGE=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
-    -*) die "flag desconocida: $1 (usa --help)" ;;
+    -*) usage_error "flag desconocida: $1" ;;
     *)
       if [ -n "$VAULT" ]; then
-        die "argumento inesperado: $1"
+        usage_error "argumento inesperado: $1"
       fi
       VAULT="$1"
       shift
       ;;
   esac
 done
-[ -n "$VAULT" ] || { usage >&2; exit 1; }
+[ -n "$VAULT" ] || usage_error "falta la ruta del vault"
 [ -d "$VAULT" ] || die "el vault no existe: $VAULT"
 pick_python3 || die "falta Python >= 3.9 (python3, py -3 o python)"
 VAULT="$(cd "$VAULT" && pwd)"

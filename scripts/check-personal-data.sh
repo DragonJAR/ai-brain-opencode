@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # check-personal-data.sh — el paquete no debe llevar datos del operador.
+#   bash scripts/check-personal-data.sh [directorio]   (por defecto, el paquete)
+#   -h, --help                                         muestra esta ayuda
 #
 # 1) Estructural (siempre): rutas home absolutas, correos, tokens.
 # 2) Nombres propios: lista local en una de estas rutas (nunca dentro del paquete):
@@ -13,8 +15,17 @@
 # La atribución publicada de README.md y README.es.md no entra en los nombres propios.
 # Los binarios se leen como texto (grep -a): un correo dentro de un PNG también es una fuga.
 set -uo pipefail
+unset CDPATH
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-[ -n "${1:-}" ] && PKG="$1"
+# shellcheck source=lib/common.sh
+. "$PKG/scripts/lib/common.sh" || exit 1
+case "${1:-}" in
+  "") ;;
+  --help|-h) usage; exit 0 ;;
+  -*) usage_error "flag desconocida: $1" ;;
+  *) PKG="$1" ;;
+esac
+[ $# -le 1 ] || usage_error "argumento inesperado: $2"
 BAD=0
 STRUCT_RE="/(home|Users)/[A-Za-z0-9._-]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}"
 
@@ -23,7 +34,6 @@ EXCLUDES=(--exclude-dir=.git --exclude-dir=.codegraph --exclude-dir=node_modules
           --exclude-dir=.atl --exclude-dir=odd --exclude-dir=__pycache__
           --exclude=check-personal-data.sh)
 
-die() { printf '  ✗ %s\n' "$*" >&2; exit 1; }
 [ -d "$PKG" ] || die "no existe el directorio a revisar: $PKG"
 
 # Corre grep dentro de $PKG. El stderr solo se muestra si el código es >= 2.

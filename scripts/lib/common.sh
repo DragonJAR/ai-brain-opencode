@@ -17,6 +17,12 @@ ok()   { printf '  + %s\n' "$*"; }
 warn() { printf '  ! %s\n' "$*" >&2; }
 die()  { printf '  ✗ %s\n' "$*" >&2; exit 1; }
 
+# usage: la ayuda de un script de entrada es su comentario de cabecera (de la línea 2
+# hasta antes de `set -`). -h/--help la imprime y sale con 0.
+usage() { sed -n '2,/^set -/p' "$0" | sed '$d'; }
+# usage_error <mensaje>: invocación inválida (flag desconocida, argumento de más o de menos); sale con 2.
+usage_error() { printf '  ✗ %s (usa --help)\n' "$*" >&2; exit 2; }
+
 is_windows() {
   case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) return 0 ;; *) return 1 ;; esac
 }

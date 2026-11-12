@@ -79,6 +79,7 @@ fi
 if [ -n "$CONFIG" ]; then
   [ -f "$CONFIG" ] || die "--config: no existe $CONFIG"
   CONFIG_ERROR="$(brain_config "$CONFIG" validate 2>&1)" || die "--config: $CONFIG $CONFIG_ERROR"
+  [ -z "$CONFIG_ERROR" ] || printf '%s\n' "$CONFIG_ERROR" >&2
   ok "config válida: $CONFIG"
 fi
 command -v git >/dev/null || die "falta git (requerido)"

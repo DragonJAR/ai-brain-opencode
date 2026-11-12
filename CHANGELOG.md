@@ -9,6 +9,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **`/audit`:** un vault recién instalado mostraba 38 enlaces rotos de las notas de piso del vendor. La auditoría
   revisa solo tu contenido: `⚙️ Meta/Floors`, `⚙️ Meta/scripts`, `scripts/` y los archivos raíz (`AGENTS.md`,
   `CLAUDE.md`…) quedan fuera, y una carpeta tuya llamada `docs`, `templates` o `tests` ya no se omite.
+- **`📝 Notes/Raw/` inmutable de verdad:** el plugin ya no inyecta frontmatter en las fuentes nuevas y `/audit` no
+  exige `type:` allí; siguen fuera de las huérfanas y en la cola de `/ingest`.
 
 ## [0.2.0] - 2026-11-11
 

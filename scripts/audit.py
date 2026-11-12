@@ -61,6 +61,9 @@ TYPED_FOLDERS = (
     "⚙️ Meta/Decisions/",
 )
 
+# Immutable sources: never typed, never orphans; only the pending-ingest queue applies.
+RAW_PREFIX = "📝 Notes/Raw/"
+
 CONTENT_FOLDERS_FOR_ORPHANS = (
     "📝 Notes/",
     "👤 CRM/",
@@ -149,7 +152,7 @@ def scan_vault(vault_dir: pathlib.Path) -> dict:
         # Auditoría de frontmatter / tipado: solo en carpetas tipadas del vault
         is_typed_scope = any(rel_md.startswith(prefix) for prefix in TYPED_FOLDERS)
         is_workflow_doc = rel_md.startswith("⚙️ Meta/Workflows/")
-        if is_typed_scope and not is_workflow_doc:
+        if is_typed_scope and not is_workflow_doc and not rel_md.startswith(RAW_PREFIX):
             fm_match = FRONTMATTER_RE.match(content)
             if not fm_match or not TYPE_ATTR_RE.search(fm_match.group(1)):
                 untyped_notes.append(rel_md)
@@ -180,7 +183,7 @@ def scan_vault(vault_dir: pathlib.Path) -> dict:
         if not is_content:
             continue
         # Excluir 📝 Notes/Raw/ (es cola de ingesta, no notas estructuradas)
-        if rel_md.startswith("📝 Notes/Raw/"):
+        if rel_md.startswith(RAW_PREFIX):
             continue
         # Excluir notas índice o templates
         stem_lower = pathlib.PurePosixPath(rel_md).stem.lower()

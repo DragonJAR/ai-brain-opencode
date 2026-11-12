@@ -81,6 +81,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   plantilla o documento vuelva a proponer `opencode run "/…"`.
 - **Linux:** el recordatorio del diario busca el bus de sesión en `$XDG_RUNTIME_DIR` cuando está definido, antes de
   `/run/user/<uid>`.
+- **README (EN/ES):** más cortos y al día. `/today`, `/ingest`, `/audit` e `/ideas` aparecían como comandos del
+  starter (son del paquete); los comandos del starter se describían como symlinks (son copias adaptadas); la
+  actualización del paquete es `install.sh --update` y la de los skills del vendor, `update-brain.sh`.
 
 ### Añadido
 - **`install.sh --update [vault]`:** actualiza el checkout del paquete con `git pull --ff-only` solo si su remoto

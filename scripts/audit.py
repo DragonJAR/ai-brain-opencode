@@ -15,12 +15,18 @@ import argparse
 import json
 import os
 import pathlib
+import posixpath
 import re
 import sys
+import unicodedata
 
-WIKILINK_RE = re.compile(r"\[\[([^\]|#\r\n]+)(?:#[^\]|\r\n]*)?(?:\|[^\]\r\n]*)?\]\]")
+# Target, then an optional #heading or ^block, then an optional |alias.
+WIKILINK_RE = re.compile(r"\[\[([^\]|#^\r\n]+)(?:[#^][^\]|\r\n]*)?(?:\|[^\]\r\n]*)?\]\]")
 FRONTMATTER_RE = re.compile(r"^---\r?\n([\s\S]*?)\r?\n---")
-TYPE_ATTR_RE = re.compile(r"^type:\s*(\S+)", re.MULTILINE)
+TYPE_ATTR_RE = re.compile(r"^type:[ \t]*(.*)$", re.MULTILINE)
+FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)")
+INGEST_SOURCE_RE = re.compile(r"\bingest \|\s*(.+?)(?:\s+->\s.*)?$")
 
 # Never walked, at any depth (dot directories are skipped as well).
 EXCLUDED_DIRS = {
@@ -72,11 +78,58 @@ CONTENT_FOLDERS_FOR_ORPHANS = (
 )
 
 
-def strip_code_blocks(text: str) -> str:
-    """Elimina bloques de código y código inline para evitar falsos positivos de wikilinks."""
-    text = re.sub(r"```[\s\S]*?```", "", text)
-    text = re.sub(r"`[^`\r\n]+`", "", text)
-    return text
+def strip_code_blocks(text: str) -> list:
+    """Devuelve las líneas sin código (bloques ``` o ~~~ y código inline), conservando la numeración."""
+    lines = []
+    fence = None
+    for line in text.splitlines():
+        if fence:
+            stripped = line.strip()
+            if stripped and stripped == stripped[0] * len(stripped) \
+                    and stripped[0] == fence[0] and len(stripped) >= len(fence):
+                fence = None
+            lines.append("")
+            continue
+        opener = FENCE_RE.match(line)
+        if opener and not (opener.group(1)[0] == "`" and "`" in line[opener.end():]):
+            fence = opener.group(1)
+            lines.append("")
+            continue
+        lines.append(INLINE_CODE_RE.sub("", line))
+    return lines
+
+
+def normalize_name(text: str) -> str:
+    """Forma comparable: NFC y sin el selector de variación VS16 (`⚙️` == `⚙`)."""
+    return unicodedata.normalize("NFC", text).replace("\ufe0f", "")
+
+
+def link_key(name: str) -> str:
+    """Clave de un nombre o enlace: solo `.md` se omite; `v1.2 plan` conserva sus puntos y `x.pdf` su extensión."""
+    key = normalize_name(name).lower()
+    return key[:-3] if key.endswith(".md") else key
+
+
+def has_type(frontmatter: str) -> bool:
+    match = TYPE_ATTR_RE.search(frontmatter)
+    if not match:
+        return False
+    value = match.group(1).split(" #", 1)[0].strip()
+    return value not in ("", '""', "''", "~", "null")
+
+
+def ingest_logged_sources(log_text: str) -> set:
+    """Fuentes exactas registradas en ingest.log (`ingest | <fuente> -> <destinos>`)."""
+    sources = set()
+    for line in log_text.splitlines():
+        match = INGEST_SOURCE_RE.search(line.strip())
+        if not match:
+            continue
+        source = match.group(1).strip().strip("`")
+        if source.startswith("[[") and source.endswith("]]"):
+            source = source[2:-2].split("|", 1)[0]
+        sources.add(normalize_name(source.strip()))
+    return sources
 
 
 def is_audited(rel_path: str) -> bool:
@@ -87,7 +140,8 @@ def is_audited(rel_path: str) -> bool:
 
 def scan_vault(vault_dir: pathlib.Path) -> dict:
     all_files = {}
-    stems = {}
+    by_path = {}
+    by_name = {}
     rel_markdowns = []
 
     for root, dirs, files in os.walk(vault_dir):
@@ -96,8 +150,8 @@ def scan_vault(vault_dir: pathlib.Path) -> dict:
             full_path = pathlib.Path(root) / file
             rel_path = full_path.relative_to(vault_dir).as_posix()
             all_files[rel_path] = full_path
-            stem_key = full_path.stem.lower()
-            stems.setdefault(stem_key, []).append(rel_path)
+            by_path.setdefault(link_key(rel_path), []).append(rel_path)
+            by_name.setdefault(link_key(file), []).append(rel_path)
             if file.endswith(".md") and is_audited(rel_path):
                 rel_markdowns.append(rel_path)
 
@@ -107,45 +161,45 @@ def scan_vault(vault_dir: pathlib.Path) -> dict:
     total_wikilinks = 0
 
     # Sin `str | None`: esa sintaxis en una anotación falla en Python 3.9, el mínimo documentado.
+    def pick(candidates, target_norm):
+        """Elección determinista entre homónimos: misma grafía, luego la ruta más corta."""
+        exact = normalize_name(target_norm)
+        exact_md = exact if exact.endswith(".md") else exact + ".md"
+
+        def rank(rel):
+            name = normalize_name(rel)
+            same_case = name == exact or name == exact_md or name.endswith(("/" + exact, "/" + exact_md))
+            return (not same_case, rel.count("/"), rel)
+
+        return min(candidates, key=rank)
+
     def resolve_link(target, source_rel):
         target_norm = target.strip().replace("\\", "/").strip("/")
         if not target_norm:
             return None
+        key = link_key(target_norm)
 
-        # 1. Coincidencia exacta relativa al vault (con o sin .md)
-        if target_norm in all_files:
-            return target_norm
-        if target_norm + ".md" in all_files:
-            return target_norm + ".md"
+        # 1. Ruta relativa al vault (con o sin .md)
+        if key in by_path:
+            return pick(by_path[key], target_norm)
 
-        # 2. Coincidencia relativa al directorio del archivo fuente
-        source_parent = pathlib.PurePosixPath(source_rel).parent
-        if str(source_parent) != ".":
-            candidate = (source_parent / target_norm).as_posix()
-            if candidate in all_files:
-                return candidate
-            if candidate + ".md" in all_files:
-                return candidate + ".md"
+        # 2. Ruta relativa al directorio del archivo fuente
+        source_parent = posixpath.dirname(source_rel)
+        if source_parent:
+            candidate = link_key(posixpath.normpath(posixpath.join(source_parent, target_norm)))
+            if candidate in by_path:
+                return pick(by_path[candidate], target_norm)
 
-        # 3. Coincidencia por basename / stem (insensible a mayúsculas)
-        target_stem = pathlib.PurePosixPath(target_norm).stem.lower()
-        if target_stem in stems:
-            matches = stems[target_stem]
-            if len(matches) == 1:
-                return matches[0]
-            # Si hay varios, preferir uno con nombre idéntico respetando mayúsculas
-            raw_stem = pathlib.PurePosixPath(target_norm).stem
-            for m in matches:
-                if pathlib.PurePosixPath(m).stem == raw_stem:
-                    return m
-            return matches[0]
-
-        return None
+        # 3. Por nombre; con carpeta (`[[carpeta/Nota]]`) solo las rutas que terminan así
+        matches = by_name.get(key.rsplit("/", 1)[-1], [])
+        if "/" in key:
+            matches = [m for m in matches if link_key(m).endswith("/" + key)]
+        return pick(matches, target_norm) if matches else None
 
     for rel_md in sorted(rel_markdowns):
         full_md = all_files[rel_md]
         try:
-            content = full_md.read_text(encoding="utf-8", errors="replace")
+            content = full_md.read_text(encoding="utf-8-sig", errors="replace")
         except OSError:
             continue
 
@@ -154,13 +208,11 @@ def scan_vault(vault_dir: pathlib.Path) -> dict:
         is_workflow_doc = rel_md.startswith("⚙️ Meta/Workflows/")
         if is_typed_scope and not is_workflow_doc and not rel_md.startswith(RAW_PREFIX):
             fm_match = FRONTMATTER_RE.match(content)
-            if not fm_match or not TYPE_ATTR_RE.search(fm_match.group(1)):
+            if not fm_match or not has_type(fm_match.group(1)):
                 untyped_notes.append(rel_md)
 
         # Auditoría de wikilinks
-        scrubbed = strip_code_blocks(content)
-        lines = scrubbed.splitlines()
-        for idx, line in enumerate(lines, start=1):
+        for idx, line in enumerate(strip_code_blocks(content), start=1):
             for match in WIKILINK_RE.finditer(line):
                 total_wikilinks += 1
                 raw_target = match.group(1).strip()
@@ -198,22 +250,22 @@ def scan_vault(vault_dir: pathlib.Path) -> dict:
     logged_sources = set()
     if ingest_log_file.is_file():
         try:
-            log_text = ingest_log_file.read_text(encoding="utf-8", errors="replace")
-            for line in log_text.splitlines():
-                if "ingest |" in line:
-                    logged_sources.add(line.strip())
+            logged_sources = ingest_logged_sources(
+                ingest_log_file.read_text(encoding="utf-8-sig", errors="replace"))
         except OSError:
             pass
 
     raw_dir = vault_dir / "📝 Notes" / "Raw"
     if raw_dir.is_dir():
-        for f in raw_dir.iterdir():
-            if f.is_file() and f.name != ".gitkeep" and not f.name.startswith("."):
-                rel_f = f.relative_to(vault_dir).as_posix()
-                # Verificar si el archivo aparece en el log
-                is_logged = any(f.name in line or rel_f in line for line in logged_sources)
-                if not is_logged:
-                    pending_raw.append(rel_f)
+        for f in raw_dir.rglob("*"):
+            rel_raw = f.relative_to(raw_dir)
+            if not f.is_file() or any(part.startswith(".") for part in rel_raw.parts):
+                continue
+            rel_f = f.relative_to(vault_dir).as_posix()
+            # La fuente cuenta como ingerida si el log la nombra exactamente: ruta del vault, ruta dentro de Raw o nombre.
+            forms = {normalize_name(rel_f), normalize_name(rel_raw.as_posix()), normalize_name(f.name)}
+            if not forms & logged_sources:
+                pending_raw.append(rel_f)
     pending_raw.sort()
 
     return {

@@ -62,9 +62,15 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **`check-personal-data.sh`:** no veía correos dentro de archivos binarios, una lista de términos con CRLF no
   coincidía con nada y una línea vacía en ella marcaba todo el paquete. Además, cualquier línea con "humanizer"
   quedaba exenta; ahora solo se eximen las URL de los clones del vendor. Los `#` de la lista son comentarios.
-- **`check-personal-data.sh`:** no veía correos dentro de archivos binarios, una lista de términos con CRLF no
-  coincidía con nada y una línea vacía en ella marcaba todo el paquete. Además, cualquier línea con "humanizer"
-  quedaba exenta; ahora solo se eximen las URL de los clones del vendor. Los `#` de la lista son comentarios.
+- **`/audit` lee los enlaces como Obsidian:** `[[v1.2 plan]]`, `[[Nota^bloque]]` y los nombres con otra forma
+  Unicode o sin el selector VS16 (`⚙ Meta` frente a `⚙️ Meta`) ya no salen como rotos; `[[x.pdf]]` no apunta a
+  `x.md`; `[[carpeta/Nota]]` se resuelve por esa ruta (y es roto si la carpeta no coincide); los bloques `~~~` o de
+  4+ comillas y el código inline se ignoran sin desplazar los números de línea. Un BOM antes del frontmatter ya no
+  oculta el `type:`, y un `type:` vacío ya no se da por válido.
+- **Cola de `/ingest`:** busca también en las subcarpetas de `📝 Notes/Raw/` y exige el nombre exacto registrado
+  (`port.pdf` ya no cuenta como ingerido porque el log nombra `report.pdf`). `⚙️ Meta/logs/ingest.log` deja de
+  estar en el `.gitignore` de la instalación: es el registro de la cola y se versiona con el vault; los logs de
+  los trabajos siguen ignorados.
 - **Linux:** el recordatorio del diario busca el bus de sesión en `$XDG_RUNTIME_DIR` cuando está definido, antes de
   `/run/user/<uid>`.
 

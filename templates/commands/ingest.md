@@ -11,7 +11,7 @@ Procesa documentos, transcripciones, lecturas o artículos depositados en `📝 
   - Guarda o copia la fuente en `📝 Notes/Raw/<nombre-descriptivo>.ext`.
   - Procede a compilar esa fuente específica.
 - Si no proporciona argumentos (`/ingest`):
-  - Revisa todos los archivos presentes en `📝 Notes/Raw/` (excluyendo `.gitkeep`).
+  - Revisa todos los archivos presentes en `📝 Notes/Raw/` y sus subcarpetas (excluyendo `.gitkeep`).
   - Consulta `⚙️ Meta/logs/ingest.log` para identificar qué fuentes aún no han sido procesadas.
 
 ## Protocolo de Compilación
@@ -36,6 +36,7 @@ Procesa documentos, transcripciones, lecturas o artículos depositados en `📝 
      - Síntesis: <resumen de una o dos oraciones>
      - Notas creadas/actualizadas: [[Nota1]], [[Nota2]]
      ```
+   - `<fuente>` es la ruta exacta del archivo en el vault (ej. `📝 Notes/Raw/articulo.pdf`): `/audit` compara ese nombre exacto para saber qué queda pendiente. Este log se versiona con el vault; los logs de los trabajos no.
 
 5. **Salida al usuario**:
    - Muestra un reporte conciso con las notas creadas, actualizadas y los wikilinks generados.

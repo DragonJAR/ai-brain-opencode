@@ -97,6 +97,8 @@ GITIGNORE_LINES = (
     ".trash/",
     ".DS_Store",
     "⚙️ Meta/logs/*.log",
+    # The /ingest record is vault content (the audit's queue), not a job log; this negation must come after the line above.
+    "!⚙️ Meta/logs/ingest.log",
     "⚙️ Meta/.probe-on",
 )
 

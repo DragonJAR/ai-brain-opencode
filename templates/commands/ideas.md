@@ -1,3 +1,7 @@
+---
+description: "Cruza dominios del vault para descubrir patrones y proponer hipótesis nuevas"
+---
+
 # /ideas — Descubrimiento de Patrones y Síntesis Cruzada
 
 Cruza dominios aparentemente desconectados del vault (`💼 Business/`, `🚀 I+D/`, `📝 Notes/`, `📓 Journals/`) para descubrir patrones emergentes, sinergias no evidentes y generar nuevas hipótesis de alto valor.

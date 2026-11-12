@@ -1,3 +1,7 @@
+---
+description: "Redacta contenido desde el vault con el skill humanizer, sin prosa de IA"
+---
+
 # /create — Redacción Auténtica de Contenido (Humanizer)
 
 Redacta piezas de contenido (artículos, notas técnicas, memos ejecutivos, newsletters o publicaciones) a partir del contexto del vault, aplicando estrictamente las directrices del skill `humanizer` para erradicar cualquier rastro de prosa artificial o clichés de IA.

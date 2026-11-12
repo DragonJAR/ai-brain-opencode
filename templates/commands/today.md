@@ -1,3 +1,7 @@
+---
+description: "Briefing del día: diario, última sesión, compromisos y seguimientos"
+---
+
 # /today — Briefing Ejecutivo Diario
 
 Genera un plan de acción y resumen ejecutivo para el día, cruzando el estado del diario personal, la última sesión de trabajo, compromisos de clientes y seguimientos de personas.

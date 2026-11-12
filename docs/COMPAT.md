@@ -11,7 +11,7 @@ mapea cada mecanismo, para saber qué está portado, qué se sustituyó y qué n
 | hooks en `~/.claude/settings.json` (stdin JSON, exit 2 bloquea) | plugins V2 en `.opencode/plugins/` (JS, hooks tipados) | **Portado** (`plugin/brain-vault/index.js`) |
 | UserPromptSubmit | `ctx.session.hook("prompt")` — muta el mensaje entrante | **Portado** |
 | SessionStart (contexto) | `ctx.session.hook("context")` — instrucciones de sistema por llamada | **Portado** |
-| PreToolUse (inspeccionar/mutar input) | `ctx.tool.hook("execute.before")` | **Portado con alcance limitado**: solo herramientas de escritura, solo markdown dentro del vault, solo notas nuevas (auto-fix, no bloqueo) |
+| PreToolUse (inspeccionar/reemplazar input, bloquear) | `ctx.tool.hook("execute.before")` — asignar `event.input` reemplaza el input; lanzar un error aborta la llamada | **Portado con alcance limitado**: `write` y `patch` (las secciones `*** Add File`), solo markdown dentro del vault, solo notas nuevas (auto-fix, no bloqueo). `edit` no crea archivos en v2 |
 | PostToolUse | `ctx.tool.hook("execute.after")` | Disponible, no usado |
 | PreCompact | `ctx.session.hook("compaction")` | Disponible, no usado |
 | Stop / SessionEnd | `ctx.event.subscribe(...)` | Parcial |
@@ -47,8 +47,8 @@ mapea cada mecanismo, para saber qué está portado, qué se sustituyó y qué n
 `validate-mcp-json`, `block-*-inline-secret`, `check-claude-code-version`), subagentes de CC
 (`agent-briefing-check`, `validate-subagent-return`), cache SDD (`sdd-cache-pre/post`), scrub de JSONL de CC.
 
-**Pendientes** (posibles con la API actual, cuando se necesiten): bloqueo duro de secretos en escrituras (la API
-documentada permite mutar input, no bloquear), guardias de shell (`ctx.shell.hook("create.before")`),
+**Pendientes** (posibles con la API actual, cuando se necesiten): bloqueo duro de secretos en escrituras (lanzar
+un error en `execute.before` aborta la llamada), guardias de shell (`ctx.shell.hook("create.before")`),
 inyección de contexto de CRM/instintos, compactación con resumen propio, verificación de claims contra evidencia de
 hooks, y el chequeo de zona horaria en eventos de calendario.
 
@@ -58,8 +58,12 @@ macOS y Linux están soportados de punta a punta (symlinks POSIX + launchd/cron)
 
 ## Cómo se compensa la diferencia de bloqueo
 
-Claude Code bloquea una llamada con exit code 2. OpenCode documenta mutación de input, no bloqueo. Por eso el
-plugin **auto-repara** en lugar de impedir: si una nota nueva llega sin frontmatter, se lo antepone. Las reglas
+Claude Code bloquea una llamada con exit code 2. En OpenCode V2 el equivalente documentado es lanzar un error en
+`ctx.tool.hook("execute.before")`: la herramienta no se ejecuta y el modelo recibe el mensaje (guía de plugins,
+"Migrate from V1"; en la API Effect, `Tool.Error`). Aun así, el plugin **auto-repara** en lugar de impedir: si una
+nota nueva llega sin frontmatter por `write` o `patch`, reemplaza el input con el frontmatter antepuesto, en vez de
+gastar un turno en un rechazo. `edit` no necesita el arreglo: en v2 rechaza un `oldString` vacío y un archivo que
+no existe, así que nunca crea notas. Las reglas
 que no se pueden forzar por hook (nunca inventar datos, no usar `git add -A`) viven en AGENTS.md, que se lee en
 cada sesión.
 

@@ -71,6 +71,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   (`port.pdf` ya no cuenta como ingerido porque el log nombra `report.pdf`). `⚙️ Meta/logs/ingest.log` deja de
   estar en el `.gitignore` de la instalación: es el registro de la cola y se versiona con el vault; los logs de
   los trabajos siguen ignorados.
+- **Plugin `brain-vault`:** las notas nuevas creadas con `patch` (`*** Add File`) también reciben frontmatter, y el
+  hook reemplaza `event.input` en vez de mutar el objeto recibido. La señal de cierre ya no salta con preguntas
+  (`¿ya terminamos por hoy?`, `that's all?`) ni dentro de otra palabra, y sí reconoce `…`, emoji y el apóstrofo `’`.
+  `docs/COMPAT.md` y el plugin ya no dicen que bloquear no está documentado: lanzar un error en `execute.before`
+  aborta la llamada.
 - **Linux:** el recordatorio del diario busca el bus de sesión en `$XDG_RUNTIME_DIR` cuando está definido, antes de
   `/run/user/<uid>`.
 

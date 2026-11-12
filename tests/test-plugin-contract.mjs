@@ -199,6 +199,81 @@ try {
     console.warn = originalWarn
   }
   ok(!threw, "un runtime sin ctx.session.hook no rompe el setup")
+
+  // 5. Close signals: questions are not farewells; ellipsis, emoji and curly apostrophes are.
+  const closeCases = [
+    [hooks, "chao…", true],
+    [hooks, "nos vemos 👋", true],
+    [hooks, "buenas noches 🌙✨", true],
+    [hooks, "¿ya terminamos por hoy?", false],
+    [hooks, "¿eso es todo?", false],
+    [hooks, "eso es todo? 🤔", false],
+    [hooks, "nachao", false],
+  ]
+  const enHooks = await load(makeVault("english", { language: "en" }))
+  closeCases.push(
+    [enHooks, "that’s all", true],
+    [enHooks, "we’re done!", true],
+    [enHooks, "bye 👋🏽", true],
+    [enHooks, "are we done?", false],
+    [enHooks, "that's all?", false],
+  )
+  for (const [target, text, expected] of closeCases) {
+    const event = { prompt: { text } }
+    target.prompt[0](event)
+    const fired = event.prompt.text !== text
+    ok(fired === expected, `${JSON.stringify(text)} ${expected ? "debe" : "no debe"} disparar el cierre`)
+  }
+
+  // 6. The tool hook replaces the input instead of mutating the caller's object.
+  const original = { filePath: join(vault, "📝 Notes", "reemplazo.md"), content: "# nueva" }
+  const replaced = { tool: "write", input: original }
+  await hook(replaced)
+  ok(original.content === "# nueva", "el input original no se muta")
+  ok(replaced.input !== original && replaced.input.content.startsWith("---\ntype: note"), "el hook reemplaza event.input con el frontmatter")
+
+  // 7. patch: every new note in a typed folder gets frontmatter; Raw, existing, typed and non-md files do not.
+  const patchText = [
+    "*** Begin Patch",
+    "*** Add File: 📝 Notes/desde-patch.md",
+    "+# Desde patch",
+    "+cuerpo",
+    "*** Add File: 📝 Notes/Raw/fuente-patch.md",
+    "+# fuente",
+    "*** Add File: 👤 CRM/con-fm.md",
+    "+---",
+    "+type: person",
+    "+---",
+    "+# ya tipada",
+    "*** Add File: 📝 Notes/datos.txt",
+    "+texto",
+    "*** Update File: 📝 Notes/vieja.md",
+    "@@",
+    "-# nota que ya existe",
+    "+# nota editada",
+    "*** End Patch",
+  ].join("\n")
+  const patchInput = { patchText }
+  const patchEvent = { tool: "patch", input: patchInput }
+  await hook(patchEvent)
+  const patched = String(patchEvent.input?.patchText ?? "")
+  ok(patchInput.patchText === patchText, "el input original del patch no se muta")
+  ok(/\*\*\* Add File: 📝 Notes\/desde-patch\.md\n\+---\n\+type: note\n\+created: \d{4}-\d{2}-\d{2}\n\+---\n\+\n\+# Desde patch\n/.test(patched),
+     "patch: una nota nueva recibe frontmatter")
+  ok(patched.includes("*** Add File: 📝 Notes/Raw/fuente-patch.md\n+# fuente\n"), "patch: una fuente en Raw queda intacta")
+  ok(patched.includes("*** Add File: 👤 CRM/con-fm.md\n+---\n+type: person\n+---\n"), "patch: una nota con frontmatter no se duplica")
+  ok(patched.includes("*** Add File: 📝 Notes/datos.txt\n+texto\n"), "patch: un archivo que no es markdown no se toca")
+  ok(patched.includes("*** Update File: 📝 Notes/vieja.md\n@@\n-# nota que ya existe\n+# nota editada\n"), "patch: una actualización no se toca")
+  ok((patched.match(/\+type: /g) || []).length === 2, "patch: solo la nota nueva gana frontmatter")
+  const applyPatch = { tool: "apply_patch", input: { patchText: "*** Begin Patch\n*** Add File: 📓 Journals/2026-01-02.md\n+hoy\n*** End Patch" } }
+  await hook(applyPatch)
+  ok(applyPatch.input.patchText.includes("+type: journal"), "apply_patch (nombre de v1) también recibe frontmatter")
+
+  // 8. edit never creates a file in OpenCode v2 (empty oldString and missing files are rejected): left untouched.
+  const editInput = { path: join(vault, "📝 Notes", "no-existe.md"), oldString: "", newString: "# nueva" }
+  const editEvent = { tool: "edit", input: editInput }
+  await hook(editEvent)
+  ok(editEvent.input === editInput && editInput.newString === "# nueva", "edit se deja intacto")
 } finally {
   rmSync(root, { recursive: true, force: true })
 }

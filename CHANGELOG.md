@@ -76,6 +76,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   (`¿ya terminamos por hoy?`, `that's all?`) ni dentro de otra palabra, y sí reconoce `…`, emoji y el apóstrofo `’`.
   `docs/COMPAT.md` y el plugin ya no dicen que bloquear no está documentado: lanzar un error en `execute.before`
   aborta la llamada.
+- **Apéndice de `AGENTS.md`:** decía que la revisión semanal corre `opencode run "/insights"`, que OpenCode v2
+  envía como texto; ahora describe lo que hace el trabajo (`--auto` y la skill `insights`). Un test impide que una
+  plantilla o documento vuelva a proponer `opencode run "/…"`.
 - **Linux:** el recordatorio del diario busca el bus de sesión en `$XDG_RUNTIME_DIR` cuando está definido, antes de
   `/run/user/<uid>`.
 

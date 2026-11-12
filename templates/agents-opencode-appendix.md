@@ -33,7 +33,7 @@ Los horarios salen de `⚙️ Meta/brain-config.json`; los días son fijos y el 
 trabajos en la zona horaria del host (la `timezone` declarada gobierna las fechas que renderiza el plugin,
 no el reloj del scheduler).
 - Recordatorio del diario: {{JOURNAL_TIME}}, de lunes a viernes (zona horaria declarada: {{TIMEZONE}}) — notificación del sistema operativo.
-- Revisión semanal: domingo {{INSIGHTS_TIME}} (headless con `opencode run "/insights"`, solo si hay entradas).
+- Revisión semanal: domingo {{INSIGHTS_TIME}} (headless con `opencode run --auto`, que pide la skill `insights` porque `opencode run` no ejecuta comandos `/`; solo si hay entradas).
 - Mantenimiento diario: {{MAINTENANCE_TIME}} (índice del diario + snapshot git).
 - Actualización del starter: lunes {{UPDATE_TIME}}.
 Estos valores son una foto de la instalación: para cambiarlos edita `⚙️ Meta/brain-config.json` y re-ejecuta

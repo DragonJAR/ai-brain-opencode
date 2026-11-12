@@ -3,11 +3,11 @@
 // Data-driven: every personal value comes from the vault's config file
 // (<vault>/⚙️ Meta/brain-config.json). No personal data lives in this file.
 //
-// Uses only documented OpenCode APIs:
+// Uses only documented OpenCode V2 plugin APIs:
 //   ctx.session.hook("prompt")       <- Claude Code UserPromptSubmit
 //   ctx.session.hook("context")      <- Claude Code SessionStart context injection
-//   ctx.tool.hook("execute.before")  <- Claude Code PreToolUse (mutates tool input)
-// Blocking semantics are NOT assumed: they are not part of the documented API.
+//   ctx.tool.hook("execute.before")  <- Claude Code PreToolUse: assigning event.input replaces the
+//                                       tool input; throwing aborts the call (unused: we repair, not block).
 //
 // The config is user-edited, so nothing here trusts its shape: a malformed
 // value degrades to the documented default instead of breaking every hook.
@@ -202,9 +202,19 @@ export default {
     // Longest-first: "eso es todo por hoy" antes que "eso es todo".
     const closeWords =
       cfg.language === "es"
-        ? /(?:chao|adi[oó]s|buenas noches|hasta ma[nñ]ana|nos vemos|eso es todo por hoy|gracias eso es todo|eso es todo|terminamos por hoy|cerramos por hoy|me voy)\s*[.!?...]*\s*$/i
-        : /(?:bye|good\s?night|see you|that'?s all|that is all|wrap up|we'?re done)\s*[.!?...]*\s*$/i
+        ? /(?<![\p{L}\p{N}])(?:chao|adi[oó]s|buenas noches|hasta ma[nñ]ana|nos vemos|eso es todo por hoy|gracias eso es todo|eso es todo|terminamos por hoy|cerramos por hoy|me voy)$/iu
+        : /(?<![\p{L}\p{N}])(?:bye|good\s?night|see you|that['’]?s all|that is all|wrap up|we['’]?re done|we are done)$/iu
+    // Trailing punctuation, ellipsis and emoji (with skin tones, ZWJ sequences and VS16).
+    const closeTail = /[\s.,;:!?¡¿…~\-–—\p{Extended_Pictographic}\p{Emoji_Modifier}\u200D\uFE0F]+$/u
     const CLOSE_MAX_LENGTH = 400
+    const isClose = (text) => {
+      const trimmed = text.trim()
+      const tail = (trimmed.match(closeTail) || [""])[0]
+      const core = trimmed.slice(0, trimmed.length - tail.length)
+      const lastSentence = core.split(/[.!?…]\s+/).pop()
+      if (tail.includes("?") || lastSentence.includes("¿")) return false
+      return closeWords.test(core)
+    }
     const meetingWords =
       cfg.language === "es"
         ? /\b(acabo de tener una (reuni[oó]n|llamada|junta)|tuve una (reuni[oó]n|llamada)|termin[oó] la (reuni[oó]n|llamada)|reuni[oó]n terminada)\b/i
@@ -258,7 +268,7 @@ export default {
           if (!text) return
           if (meetingWords.test(text)) {
             event.prompt.text = text + meetingNote
-          } else if (text.length <= CLOSE_MAX_LENGTH && closeWords.test(text.trim())) {
+          } else if (text.length <= CLOSE_MAX_LENGTH && isClose(text)) {
             event.prompt.text = text + closeNote
           }
         })
@@ -274,22 +284,51 @@ export default {
       return
     }
 
+    // Frontmatter for a NEW typed note (COMPAT scope), or "" to leave the content as written.
+    const newNoteFrontmatter = (path, content) => {
+      if (typeof content !== "string" || !content.trim()) return ""
+      const rel = vaultRelative(vault, path)
+      if (!/\.(md|markdown)$/i.test(rel)) return ""
+      const type = noteType(rel)
+      if (!type) return ""
+      if (existsSync(resolve(vault, rel))) return ""
+      if (FRONTMATTER_PATTERN.test(content.trimStart())) return ""
+      return `---\ntype: ${type}\ncreated: ${dateFormatter.format(new Date())}\n---\n\n`
+    }
+
+    // patch/apply_patch create files only through "*** Add File: <path>" sections of "+" lines.
+    const addFrontmatterToPatch = (patchText) => {
+      const lines = patchText.split("\n")
+      const out = []
+      for (let i = 0; i < lines.length; i++) {
+        out.push(lines[i])
+        const header = /^\*\*\* Add File:\s*(.+?)\s*$/.exec(lines[i].replace(/\r$/, ""))
+        if (!header) continue
+        let end = i + 1
+        while (end < lines.length && lines[end].startsWith("+")) end++
+        const body = lines.slice(i + 1, end).map((line) => line.slice(1).replace(/\r$/, "")).join("\n")
+        const frontmatter = newNoteFrontmatter(header[1], body)
+        if (frontmatter) out.push(...frontmatter.replace(/\n$/, "").split("\n").map((line) => "+" + line))
+      }
+      return out.join("\n")
+    }
+
     try {
       await toolHook("execute.before", (event) => {
         const tool = String(event?.tool ?? "").toLowerCase()
+        const input = event?.input
+        if (!input || typeof input !== "object") return
+        // edit is not handled: in OpenCode v2 it rejects an empty oldString and a missing file, so it never creates a note.
+        if (tool === "patch" || tool === "apply_patch") {
+          if (typeof input.patchText !== "string") return
+          const patchText = addFrontmatterToPatch(input.patchText)
+          if (patchText !== input.patchText) event.input = { ...input, patchText }
+          return
+        }
         if (!tool.includes("write")) return
-        const input = event.input
-        if (!input || typeof input.content !== "string" || !input.content.trim()) return
         const path = String(input.filePath ?? input.file_path ?? input.path ?? input.file ?? "")
-        const rel = vaultRelative(vault, path)
-        if (!/\.(md|markdown)$/i.test(rel)) return
-        const type = noteType(rel)
-        if (!type) return
-        // Only NEW notes get frontmatter (COMPAT scope); overwrites of existing
-        // files are left exactly as the author wrote them.
-        if (existsSync(resolve(vault, rel))) return
-        if (FRONTMATTER_PATTERN.test(input.content.trimStart())) return
-        input.content = `---\ntype: ${type}\ncreated: ${dateFormatter.format(new Date())}\n---\n\n` + input.content
+        const frontmatter = newNoteFrontmatter(path, input.content)
+        if (frontmatter) event.input = { ...input, content: frontmatter + input.content }
       })
     } catch (err) {
       console.warn("[brain-vault] ctx.tool.hook rechazó el registro; frontmatter automático inactivo: " + (err instanceof Error ? err.message : String(err)))

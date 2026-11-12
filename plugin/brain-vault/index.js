@@ -232,6 +232,7 @@ export default {
           "- Never use `git add -A` or `git add .`: always use explicit paths.",
           "- Never invent technical data (CVEs, versions, IPs, tool outputs): use MISSING / [PENDING_DATA].",
           "- Respond in the vault language (en) with an actionable-first, no-filler criterion.",
+          "- The starter skills were written for Claude Code: read CLAUDE.md as AGENTS.md and their skill paths as .opencode/skills/; this plugin replaces their hooks, so never install or report them as missing.",
           "- Journal: " + cfg.journal.time + " (" + cfg.timezone + "); tracked habits: " + (cfg.habits.join(", ") || "none") + ".",
           ...cfg.extra_rules.map((rule) => "- " + rule),
         ].join("\n")
@@ -242,6 +243,7 @@ export default {
           "- Nunca uses `git add -A` ni `git add .`: siempre rutas explícitas.",
           "- Nunca inventes datos técnicos (CVE, versiones, IPs, salidas de herramientas): usa MISSING / [PENDING_DATA].",
           "- Responde en el idioma del vault (" + cfg.language + ") y con criterio de no-despedida: lo accionable primero, sin relleno.",
+          "- Los skills del starter se escribieron para Claude Code: lee CLAUDE.md como AGENTS.md y sus rutas de skills como .opencode/skills/; este plugin reemplaza sus hooks, así que nunca los instales ni los reportes como faltantes.",
           "- Diario: " + cfg.journal.time + " (" + cfg.timezone + "); hábitos trackeados: " + (cfg.habits.join(", ") || "ninguno") + ".",
           ...cfg.extra_rules.map((rule) => "- " + rule),
         ].join("\n")

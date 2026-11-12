@@ -22,6 +22,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import ownership  # noqa: E402
+import vault_layout  # noqa: E402
 
 # name -> (starter subdir, vault dir, link target prefix, kind, suffixes, noun, linked, copied)
 SECTIONS = {
@@ -96,6 +97,15 @@ def vendor_entries(source, kind, suffixes):
     return entries
 
 
+def wanted_entries(name, source, kind, suffixes):
+    """The vendor entries of a section, minus the commands the package replaces."""
+    entries = vendor_entries(source, kind, suffixes)
+    if name == "commands":
+        replaced = {command + ".md" for command in vault_layout.REPLACED_COMMANDS}
+        entries = [entry for entry in entries if entry.name not in replaced]
+    return entries
+
+
 def prune(data, vault, vault_dir, wanted):
     """Drop owned entries the starter no longer ships, while still unchanged.
 
@@ -155,7 +165,7 @@ def wire(data, vault, mode, names):
         raise ownership.ManifestError("no hay un starter válido en " + str(starter))
     for name in names:
         subdir, vault_dir, target_prefix, kind, suffixes, noun, linked, copied = SECTIONS[name]
-        entries = vendor_entries(starter / subdir, kind, suffixes)
+        entries = wanted_entries(name, starter / subdir, kind, suffixes)
         rewrite = name in REWRITTEN
         copy = rewrite or mode == "copy"
         managed = 0

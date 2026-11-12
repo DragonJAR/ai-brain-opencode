@@ -54,7 +54,7 @@ Running it again is safe: your content is never overwritten.
 | `/setup-brain` | Personalize `AGENTS.md` and the config |
 | `/ingest` | Compile sources in `📝 Notes/Raw/` into linked notes; the source stays untouched |
 | `/audit` | Broken wikilinks, orphan notes, untyped notes, pending sources |
-| `/diagnose` | The starter's self-check (written for Claude Code; for this vault prefer `verify.sh` and `/audit`) |
+| `/diagnose` | Health check of this vault: install, config, plugin, notes, job logs |
 | `/setup-vault-types` | Choose the document types your vault uses |
 | `/second-brain-mapping` | Structured metadata and cross-document insights |
 | `/graphify` | Knowledge graph of the vault (HTML and JSON); installs the `graphify` Python package |

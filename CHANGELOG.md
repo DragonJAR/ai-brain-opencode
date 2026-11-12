@@ -10,6 +10,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   comandos, configurar, actualizar).
 
 ### Corregido
+- **`/diagnose` daba el vault por roto:** el del starter audita una instalación de Claude Code. El paquete trae
+  ahora el suyo (ejecuta `verify.sh`, `audit.py` y revisa los logs de los trabajos) y `wire.py` no copia el del
+  vendor (`REPLACED_COMMANDS` en `vault_layout.py`).
+- **Skills del starter en vaults ya instalados:** la regla para leerlos en OpenCode va también en el contexto que el
+  plugin agrega en cada turno, porque `AGENTS.md` nunca se sobrescribe.
+- **Mapa del vault en `AGENTS.md`:** un test exige que describa exactamente las carpetas raíz de `vault_layout.py`.
 - **Instalador del vendor visible para el modelo:** el `SKILL.md` raíz del starter (un instalador para Claude
   Code) se anunciaba como skill dentro del vault. Ahora queda oculto con una regla de permisos en `opencode.json`,
   registrada en el manifiesto y revertida al desinstalar. La edición de `opencode.json` (esa regla y los MCP de

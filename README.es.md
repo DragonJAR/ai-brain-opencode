@@ -55,7 +55,7 @@ Repetirlo es seguro: tu contenido nunca se sobrescribe.
 | `/setup-brain` | Personaliza `AGENTS.md` y la config |
 | `/ingest` | Compila las fuentes de `📝 Notes/Raw/` en notas enlazadas; la fuente queda intacta |
 | `/audit` | Wikilinks rotos, notas huérfanas, notas sin tipo, fuentes pendientes |
-| `/diagnose` | Autochequeo del starter (escrito para Claude Code; para este vault usa `verify.sh` y `/audit`) |
+| `/diagnose` | Chequeo de salud de este vault: instalación, config, plugin, notas y logs de los trabajos |
 | `/setup-vault-types` | Elige los tipos de documento que usa tu vault |
 | `/second-brain-mapping` | Metadatos estructurados y hallazgos entre documentos |
 | `/graphify` | Grafo de conocimiento del vault (HTML y JSON); instala el paquete de Python `graphify` |

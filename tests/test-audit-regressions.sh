@@ -134,12 +134,19 @@ STARTER="$VAULT/.opencode/skills/ai-brain-starter"
 mkdir -p "$STARTER/skills/added-skill"
 printf '# added\n' > "$STARTER/skills/added-skill/SKILL.md"
 rm -f "$STARTER/commands/brain-journal.md"
+# A starter command the package replaces (vault_layout.REPLACED_COMMANDS) is never
+# copied over the package version, not even by the vault-side re-wire.
+printf -- '---\ndescription: "vendor"\n---\nVENDOR-DIAGNOSE for Claude Code\n' > "$STARTER/commands/diagnose.md"
 python3 "$VAULT/scripts/lib/wire.py" "$VAULT" --mode link > "$TMP_ROOT/wire.txt" 2>&1 || fail "vault-side wire.py failed"
 [ -L "$VAULT/.opencode/skills/added-skill" ] || fail "wire.py did not link the skill the starter added"
 if [ -e "$VAULT/.opencode/commands/brain-journal.md" ] || [ -L "$VAULT/.opencode/commands/brain-journal.md" ]; then
   fail "wire.py left a dangling link to a command the starter dropped"
 fi
 [ -f "$VAULT/.opencode/commands/audit.md" ] || fail "wire.py removed a package command"
+if grep -q 'VENDOR-DIAGNOSE' "$VAULT/.opencode/commands/diagnose.md" 2>/dev/null; then
+  fail "wire.py copied the vendor /diagnose over the package one"
+fi
+grep -q 'scripts/verify.sh' "$VAULT/.opencode/commands/diagnose.md" || fail "the package /diagnose is not installed"
 
 # 8. The vault verifier sees a broken symlink on every platform (`find -xtype`
 #    is GNU-only and failed silently on macOS).

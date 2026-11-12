@@ -119,7 +119,12 @@ sesión de OpenCode abierta sobre el vault; cada uno delega en su skill, que el 
 | `/humanizer` | Quitar los AI-isms de la prosa externa y reescribirla en tu voz real |
 | `/repurpose-talk` | Convertir una ponencia en 10–30 piezas de contenido |
 | `/nano-banana` | Generar o editar imágenes con el modelo Gemini Image de Google |
+| **Comandos del paquete (este repo)** | |
 | `/create` | Redacción de contenido humanizado a partir del contexto del vault sin clichés de IA |
+| `/today` | Briefing ejecutivo diario: estado del diario, última sesión, compromisos de clientes y seguimientos |
+| `/ingest` | Compilar fuentes crudas de `📝 Notes/Raw/` en conocimiento estructurado del vault, preservando la fuente |
+| `/audit` | Auditoría determinista de integridad: wikilinks rotos, notas huérfanas, markdown sin tipar, fuentes pendientes |
+| `/ideas` | Descubrimiento de patrones y síntesis cruzada entre Business, I+D, Notes y Journals |
 
 ## Configuración
 

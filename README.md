@@ -119,7 +119,12 @@ OpenCode session opened on the vault; each forwards to its skill, which the inst
 | `/humanizer` | Strip AI-isms from external prose and rewrite in your actual voice |
 | `/repurpose-talk` | Turn a speaking engagement into 10–30 pieces of content |
 | `/nano-banana` | Generate or edit images using Google's Gemini Image model |
-| `/create` | Humanized content drafting from vault context in authentic voice (zero AI clichés) |
+| **Package commands (this repo)** | |
+| `/create` | Authentic content drafting from vault context (humanizer-strict, zero AI clichés) |
+| `/today` | Daily executive briefing: journal state, last session, client commitments, people follow-ups |
+| `/ingest` | Compile raw sources from `📝 Notes/Raw/` into structured vault knowledge, keeping the source intact |
+| `/audit` | Deterministic vault integrity audit: broken wikilinks, orphan notes, untyped markdown, pending raw sources |
+| `/ideas` | Cross-domain pattern discovery and synthesis over Business, I+D, Notes and Journals |
 
 ## Configuration
 

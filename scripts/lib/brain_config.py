@@ -93,9 +93,24 @@ def read_user(path):
     return data, None
 
 
+# Rejected anywhere in a path handed to git: Windows separators, and the glob
+# characters git would expand in a pathspec.
+UNSAFE_PATH_CHARS = set("\\*?[")
+DRIVE_RE = re.compile(r"^[A-Za-z]:")
+
+
 def safe_relative(value):
+    """A plain path inside the vault: never the vault root, .git, an option or a magic pathspec."""
     path = pathlib.PurePosixPath(value)
-    return not path.is_absolute() and ".." not in path.parts and not value.startswith("-")
+    return (
+        not path.is_absolute()
+        and bool(path.parts)
+        and ".." not in path.parts
+        and ".git" not in path.parts
+        and not value.startswith(("-", ":"))
+        and not DRIVE_RE.match(value)
+        and not UNSAFE_PATH_CHARS.intersection(value)
+    )
 
 
 def merge(defaults, user, prefix, warnings):
@@ -117,9 +132,14 @@ def merge(defaults, user, prefix, warnings):
             items = [item.strip() for item in items if isinstance(item, str) and item.strip()]
             if dotted in PATH_LIST_KEYS:
                 unsafe = [item for item in items if not safe_relative(item)]
-                if unsafe:
-                    warnings.append("%s ignora rutas fuera del vault: %s" % (dotted, ", ".join(unsafe)))
                 items = [item for item in items if safe_relative(item)]
+                if unsafe:
+                    warnings.append("%s ignora rutas no válidas (fuera del vault, raíz, .git, comodines o "
+                                    "pathspec de git): %s" % (dotted, ", ".join(unsafe)))
+                    if not items:
+                        items = [item for item in default if isinstance(item, str) and safe_relative(item)]
+                        warnings.append("%s sin rutas válidas; se usa %s"
+                                        % (dotted, json.dumps(items, ensure_ascii=False)))
             result[key] = items
         else:
             good = isinstance(value, str) and value.strip() != ""

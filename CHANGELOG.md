@@ -14,6 +14,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **Logs de los trabajos:** `daily-maintenance` y `update-brain` escribían `maintenance.log` y `update.log` mientras
   launchd escribía `<trabajo>.log`, que nunca se rotaba. Ahora cada trabajo tiene un solo log, `<trabajo>.log`, en
   el trabajo, launchd y cron (que además deja de perder la salida). Los logs antiguos pueden borrarse.
+- **`snapshot_paths`:** aceptaba `.` (el snapshot diario confirmaba todo el vault, contenido personal incluido),
+  barras invertidas, `.git`, comodines y pathspecs mágicos de git (`:/`, `:(glob)`). Esas entradas se descartan con
+  aviso; si no queda ninguna válida se usa la lista por defecto. `install.sh --config` muestra los mismos avisos.
 
 ## [0.2.0] - 2026-11-11
 

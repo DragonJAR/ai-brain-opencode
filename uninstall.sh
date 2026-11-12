@@ -6,6 +6,7 @@
 #   --dry-run       muestra lo que se eliminaría sin tocar nada
 #   -h, --help      muestra esta ayuda
 set -euo pipefail
+unset CDPATH
 
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB="$PKG/scripts/lib"

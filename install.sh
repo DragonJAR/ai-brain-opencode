@@ -17,6 +17,7 @@
 # En Windows hacen falta cygpath y que `opencode run --help` responda. No se exige Developer Mode.
 # Idempotente: re-ejecutar es seguro; el contenido personal nunca se sobrescribe.
 set -euo pipefail
+unset CDPATH
 
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STARTER_REPO="https://github.com/mycelium-hq/ai-brain-starter"
@@ -101,13 +102,12 @@ if [ "$WITH_SCHEDULE" = 1 ] && [ "$OS" = "Linux" ]; then
   command -v crontab >/dev/null || die "falta crontab (lo requiere --with-schedule en Linux); instala cron o ejecuta sin --with-schedule. No se modificó el vault"
 fi
 # git commit needs an author. `git var` matches what commit will resolve, including
-# Apple Git's automatic identity. Check it before the vault is created or changed.
+# Apple Git's automatic identity. Check it before the vault is created or changed,
+# outside the caller's cwd: another repo's local identity would not apply to the vault.
 if [ "$WIRE" = 0 ]; then
-  if [ -d "$VAULT/.git" ]; then
-    git_ident() { git -C "$VAULT" var "$1" >/dev/null 2>&1; }
-  else
-    git_ident() { git var "$1" >/dev/null 2>&1; }
-  fi
+  IDENT_DIR="/"
+  if [ -d "$VAULT/.git" ]; then IDENT_DIR="$VAULT"; fi
+  git_ident() { git -C "$IDENT_DIR" var "$1" >/dev/null 2>&1; }
   if ! git_ident GIT_AUTHOR_IDENT || ! git_ident GIT_COMMITTER_IDENT; then
     die "git no tiene identidad (user.name y user.email). Configúrala antes de continuar. No se modificó el vault"
   fi
@@ -126,6 +126,13 @@ for rel in ".opencode" ".opencode/skills" ".opencode/skills/ai-brain-starter" \
            ".opencode/commands" ".opencode/plugins" "scripts" "scripts/jobs" "⚙️ Meta" "⚙️ Meta/scripts"; do
   [ -L "$VAULT/$rel" ] && die "ruta base es un symlink; se preservó el vault: $rel"
 done
+# The installer seeds these; through a symlink it would write outside the vault.
+if [ "$WIRE" = 0 ]; then
+  for rel in "AGENTS.md" "⚙️ Meta/brain-config.json" "⚙️ Meta/journal-config.md"; do
+    [ -L "$VAULT/$rel" ] \
+      && die "$rel es un symlink; el instalador no escribe a través de enlaces. Reemplázalo por un archivo normal; se preservó el vault"
+  done
+fi
 
 if [ "$WIRE" = 1 ]; then
   for rel in ".opencode/skills" ".opencode/commands" ".opencode/plugins" "scripts" "scripts/jobs" "⚙️ Meta" "⚙️ Meta/scripts"; do
@@ -299,7 +306,8 @@ echo "== 6. Configuración del diario (plantilla del vendor, sin sobrescribir) =
 if [ "$WIRE" = 1 ]; then
   ok "journal-config.md preservado (--wire)"
 elif [ ! -f "$VAULT/⚙️ Meta/journal-config.md" ] && [ -f "$R/templates/journal-config.md" ]; then
-  cp "$R/templates/journal-config.md" "$VAULT/⚙️ Meta/journal-config.md" && ok "journal-config.md creado"
+  cp "$R/templates/journal-config.md" "$VAULT/⚙️ Meta/journal-config.md" || die "no se pudo crear ⚙️ Meta/journal-config.md"
+  ok "journal-config.md creado"
   owner_manifest record-file "⚙️ Meta/journal-config.md" "$VAULT/⚙️ Meta/journal-config.md" \
     || warn "no se pudo registrar ⚙️ Meta/journal-config.md"
 else
@@ -311,9 +319,12 @@ BRC="$VAULT/⚙️ Meta/brain-config.json"
 if [ "$WIRE" = 1 ]; then
   ok "brain-config.json preservado (--wire)"
 elif [ -n "$CONFIG" ]; then
-  [ -f "$CONFIG" ] || die "no existe --config: $CONFIG"
-  if [ -f "$BRC" ]; then cp "$BRC" "$BRC.bak.$(date +%Y%m%d-%H%M%S)" && warn "backup de la config previa"; fi
-  cp "$CONFIG" "$BRC" && ok "config sembrada desde $CONFIG"
+  if [ -f "$BRC" ]; then
+    cp "$BRC" "$BRC.bak.$(date +%Y%m%d-%H%M%S)" || die "no se pudo respaldar la config previa; no se sembró --config"
+    warn "backup de la config previa"
+  fi
+  cp "$CONFIG" "$BRC" || die "no se pudo sembrar la config desde $CONFIG"
+  ok "config sembrada desde $CONFIG"
   BASE_PATHS+=("⚙️ Meta/brain-config.json")
 elif [ ! -f "$BRC" ]; then
   brain_config "$BRC" seed "$SLUG" || die "no se pudo sembrar brain-config.json desde templates/brain-config.example.json"
@@ -422,8 +433,10 @@ for f in "$PKG"/templates/jobs/*.sh; do
   [ -f "$f" ] || continue
   PKG_JOBS+=("scripts/jobs/$(basename "$f")" "$f" 0755)
 done
-install_files "${PKG_JOBS[@]}"
-ok "$MANAGED trabajos gestionados"
+if [ "${#PKG_JOBS[@]}" -gt 0 ]; then
+  install_files "${PKG_JOBS[@]}"
+  ok "$MANAGED trabajos gestionados"
+fi
 # Lo que el vault necesita para verificarse y correr sus trabajos sin el checkout
 # del paquete. La lista de rutas gestionadas vive en ownership.py (MANAGED_FILES).
 install_files \

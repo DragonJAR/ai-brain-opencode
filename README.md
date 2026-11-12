@@ -23,7 +23,8 @@
 | `.opencode/plugins/brain-vault/index.js` | OpenCode plugin (context, close signal, meeting trigger, frontmatter) |
 | `AGENTS.md` (+ `CLAUDE.md` → `AGENTS.md`) | Per-session brain memory; OpenCode reads it each session |
 | `⚙️ Meta/brain-config.json` | Language, timezone, journal time, habits, schedule times |
-| `scripts/verify.sh`, `scripts/lib/ownership.py`, `scripts/lib/python3.sh`, `scripts/jobs/*.sh` | Health check, ownership library, Python detection, scheduled jobs |
+| `scripts/verify.sh`, `scripts/audit.py`, `scripts/jobs/*.sh` | Health check, integrity audit, scheduled jobs |
+| `scripts/lib/` (`ownership.py`, `wire.py`, `brain_config.py`, `common.sh`, `python3.sh`, `brain-config.defaults.json`) | Shared libraries: the vault verifies itself, runs its jobs and re-wires a starter update without the package checkout |
 | `.opencode/brain-vault-install-manifest.json` | Ownership fingerprints for safe uninstall |
 | `opencode.json` | **Only** with `--with-mcp` (remote MCP servers) |
 
@@ -56,9 +57,11 @@ The vault path is **always explicit**. Does not automatically detect vaults or m
 | `--with-obsidian` | Install five Obsidian community plugins under `.obsidian/plugins/` (macOS/Linux only) |
 | `--with-schedule` | Register scheduled jobs (launchd on macOS, cron on Linux, schtasks on Windows) |
 
-Also accepted: `--help` / `-h`, and `--yes` / `-y` (no prompts; installer is non-interactive).
+| `--dry-run` | Check the requirements and print the plan; the vault is not touched |
 
-Update starter (explicit, never automatic), then re-wire:
+Also accepted: `--help` / `-h`, `--version`, and `--yes` / `-y` (no prompts; installer is non-interactive).
+
+Update the starter by hand, then re-wire. Without `--with-schedule` nothing updates on its own; with it, the weekly `update-brain.sh` job pulls the starter and humanizer (fast-forward only) and re-wires what changed. A clone pinned with `BRAIN_STARTER_PIN=<sha>` is never pulled:
 
 ```bash
 BRAIN_STARTER_UPDATE=1 bash install.sh ~/path/to/my-brain
@@ -146,6 +149,12 @@ Seeded as `⚙️ Meta/brain-config.json` from `templates/brain-config.example.j
   "habits": [],
   "accountability": [],
   "extra_rules": [],
+  "snapshot_paths": [
+    "📓 Journals",
+    "⚙️ Meta/Sessions",
+    "⚙️ Meta/Decisions",
+    "⚙️ Meta/journal-index.json"
+  ],
   "schedule": {
     "insights_time": "21:00",
     "maintenance_time": "03:30",
@@ -165,12 +174,14 @@ Defaults from `templates/brain-config.example.json` and `scripts/schedule.sh`:
 | `daily-maintenance.sh` | `03:30` | Every day |
 | `update-brain.sh` | `08:00` | Monday |
 
+`daily-maintenance.sh` commits only the paths listed in `snapshot_paths` (add `👤 CRM`, `📝 Notes`… if you want them in the daily snapshot); anything else you staged yourself is left alone. Each job writes to `⚙️ Meta/logs/`, rotates its log at 1 MiB and never overlaps a run of itself. Jobs keep the `PATH` of the shell that scheduled them, so re-run the scheduler after moving `opencode` or Python.
+
 Times fire in the **host system timezone**; `timezone` in `brain-config.json` governs the dates the
 plugin renders, not the scheduler clock.
 
 ```bash
 bash scripts/schedule.sh ~/path/to/my-brain --dry-run   # show jobs; no launchd/cron writes
-bash scripts/schedule.sh ~/path/to/my-brain             # install (requires prior --with-schedule path or this)
+bash scripts/schedule.sh ~/path/to/my-brain             # install, or re-apply after editing the times
 bash scripts/schedule.sh ~/path/to/my-brain --remove    # remove only verified owned entries
 ```
 
@@ -190,9 +201,10 @@ On **WSL2**, cron does not start by itself: `sudo service cron start` (installer
 ```bash
 bash uninstall.sh ~/path/to/my-brain
 bash uninstall.sh ~/path/to/my-brain --purge-clones
+bash uninstall.sh ~/path/to/my-brain --dry-run        # list what would go; remove nothing
 ```
 
-Removes only **unchanged owned** artifacts from the install manifest. Modified files, foreign symlinks, and ambiguous items are **preserved** and reported. `--purge-clones` also drops verified vendor clones (`ai-brain-starter`, `humanizer`).
+Removes only **unchanged owned** artifacts from the install manifest. Modified files, foreign symlinks, and ambiguous items are **preserved** and reported. `--purge-clones` also drops the vendor clones (`ai-brain-starter`, `humanizer`) while they still point at their origin and have no local changes.
 
 ## Troubleshooting
 
@@ -203,6 +215,9 @@ Removes only **unchanged owned** artifacts from the install manifest. Modified f
 | `archivo modificado o no verificado, preservado` on uninstall | You edited the file, or filesystem mode drift (e.g. DrvFs)—expected safety |
 | `bad interpreter: bash\r` | CRLF checkout; use a Linux filesystem inside WSL2 |
 | Plugin ignores config | Folder named `⚙ Meta` (no VS16) ≠ `⚙️ Meta` |
+| A scheduled job cannot find `opencode` | It was scheduled from a shell without it on `PATH` → re-run `bash scripts/schedule.sh <vault>` from one that has it |
+| `ya existe una tarea ajena` / `launch agent ajeno` | Another vault with the same folder name already owns that schedule entry; rename one of the folders |
+| `propiedad de cron heredada o no soportada` | Manifest from an early version, never migrated automatically: remove its scheduled entries by hand, delete `.opencode/brain-vault-install-manifest.json`, then re-run `install.sh` |
 | `refusing to modify a symlinked… opencode.json` / missing git identity | Regular `opencode.json` required for `--with-mcp`; set `user.name` / `user.email` before install |
 
 ## Privacy
@@ -218,11 +233,12 @@ ai-brain-opencode/
 ├── install.sh · uninstall.sh
 ├── plugin/brain-vault/index.js
 ├── scripts/{schedule,verify,check-personal-data}.sh · scripts/audit.py
-├── scripts/lib/ownership.py
+├── scripts/lib/{ownership,wire,brain_config}.py · scripts/lib/{common,python3}.sh
 ├── templates/brain-config.example.json
 ├── templates/commands/*.md
 ├── templates/jobs/*.sh
-├── tests/run.sh
+├── tests/run.sh · .github/workflows/ci.yml
+├── VERSION · CHANGELOG.md
 └── docs/COMPAT.md
 ```
 

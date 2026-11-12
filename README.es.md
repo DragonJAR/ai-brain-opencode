@@ -23,7 +23,8 @@
 | `.opencode/plugins/brain-vault/index.js` | Plugin OpenCode (contexto, cierre, reunión, frontmatter) |
 | `AGENTS.md` (+ `CLAUDE.md` → `AGENTS.md`) | Memoria del cerebro por sesión; OpenCode la lee en cada sesión |
 | `⚙️ Meta/brain-config.json` | Idioma, zona, hora del diario, hábitos, horarios |
-| `scripts/verify.sh`, `scripts/lib/ownership.py`, `scripts/lib/python3.sh`, `scripts/jobs/*.sh` | Salud del vault, propiedad, detección de Python, trabajos |
+| `scripts/verify.sh`, `scripts/audit.py`, `scripts/jobs/*.sh` | Salud del vault, auditoría de integridad, trabajos |
+| `scripts/lib/` (`ownership.py`, `wire.py`, `brain_config.py`, `common.sh`, `python3.sh`, `brain-config.defaults.json`) | Bibliotecas compartidas: el vault se verifica, corre sus trabajos y re-cablea una actualización del starter sin el checkout del paquete |
 | `.opencode/brain-vault-install-manifest.json` | Huellas de propiedad para desinstalar con seguridad |
 | `opencode.json` | **Solo** con `--with-mcp` (servidores MCP remotos) |
 
@@ -56,9 +57,11 @@ La ruta del vault es **siempre explícita**. No detecta vaults automáticamente 
 | `--with-obsidian` | Instala cinco plugins comunitarios de Obsidian bajo `.obsidian/plugins/` (solo macOS/Linux) |
 | `--with-schedule` | Registra trabajos (launchd en macOS, cron en Linux, schtasks en Windows) |
 
-También acepta: `--help` / `-h`, y `--yes` / `-y` (sin preguntas; el instalador no es interactivo).
+| `--dry-run` | Valida los requisitos y muestra el plan; no toca el vault |
 
-Actualizar el starter (explícito, nunca automático) y re-cablear:
+También acepta: `--help` / `-h`, `--version`, y `--yes` / `-y` (sin preguntas; el instalador no es interactivo).
+
+Actualizar el starter a mano y re-cablear. Sin `--with-schedule` nada se actualiza solo; con él, el trabajo semanal `update-brain.sh` hace pull del starter y de humanizer (solo fast-forward) y re-cablea lo que cambió. Un clon fijado con `BRAIN_STARTER_PIN=<sha>` nunca recibe pull:
 
 ```bash
 BRAIN_STARTER_UPDATE=1 bash install.sh ~/ruta/a/mi-cerebro
@@ -146,6 +149,12 @@ Se siembra como `⚙️ Meta/brain-config.json` desde `templates/brain-config.ex
   "habits": [],
   "accountability": [],
   "extra_rules": [],
+  "snapshot_paths": [
+    "📓 Journals",
+    "⚙️ Meta/Sessions",
+    "⚙️ Meta/Decisions",
+    "⚙️ Meta/journal-index.json"
+  ],
   "schedule": {
     "insights_time": "21:00",
     "maintenance_time": "03:30",
@@ -165,12 +174,14 @@ Defaults de `templates/brain-config.example.json` y `scripts/schedule.sh`:
 | `daily-maintenance.sh` | `03:30` | Todos los días |
 | `update-brain.sh` | `08:00` | Lunes |
 
+`daily-maintenance.sh` confirma solo las rutas de `snapshot_paths` (agrega `👤 CRM`, `📝 Notes`… si las quieres en el snapshot diario); lo que tú hayas dejado en el index no se toca. Cada trabajo escribe en `⚙️ Meta/logs/`, rota su log al llegar a 1 MiB y nunca se solapa consigo mismo. Los trabajos conservan el `PATH` del shell que los programó: repite el scheduler si mueves `opencode` o Python.
+
 Los horarios disparan en la **zona horaria del host**; la `timezone` de `brain-config.json` gobierna las
 fechas que renderiza el plugin, no el reloj del scheduler.
 
 ```bash
 bash scripts/schedule.sh ~/ruta/a/mi-cerebro --dry-run   # muestra jobs; no escribe launchd/cron
-bash scripts/schedule.sh ~/ruta/a/mi-cerebro             # instala
+bash scripts/schedule.sh ~/ruta/a/mi-cerebro             # instala, o re-aplica tras editar los horarios
 bash scripts/schedule.sh ~/ruta/a/mi-cerebro --remove    # quita solo entradas propias verificadas
 ```
 
@@ -190,9 +201,10 @@ En **WSL2**, cron no arranca solo: `sudo service cron start` (el instalador avis
 ```bash
 bash uninstall.sh ~/ruta/a/mi-cerebro
 bash uninstall.sh ~/ruta/a/mi-cerebro --purge-clones
+bash uninstall.sh ~/ruta/a/mi-cerebro --dry-run        # lista lo que se iría; no borra nada
 ```
 
-Solo borra artefactos **propios sin cambios** del manifiesto. Lo modificado, symlinks ajenos y lo ambiguo se **preserva** y se informa. `--purge-clones` también elimina clones de vendor verificados (`ai-brain-starter`, `humanizer`).
+Solo borra artefactos **propios sin cambios** del manifiesto. Lo modificado, symlinks ajenos y lo ambiguo se **preserva** y se informa. `--purge-clones` también elimina los clones del vendor (`ai-brain-starter`, `humanizer`) mientras sigan apuntando a su origen y no tengan cambios locales.
 
 ## Problemas frecuentes
 
@@ -203,6 +215,9 @@ Solo borra artefactos **propios sin cambios** del manifiesto. Lo modificado, sym
 | `archivo modificado o no verificado, preservado` al desinstalar | Editaste el archivo o hay drift de modos (p. ej. DrvFs)—seguridad esperada |
 | `bad interpreter: bash\r` | Checkout CRLF; usa filesystem Linux dentro de WSL2 |
 | El plugin ignora la config | Carpeta `⚙ Meta` (sin VS16) ≠ `⚙️ Meta` |
+| Un trabajo programado no encuentra `opencode` | Se programó desde un shell sin él en el `PATH` → repite `bash scripts/schedule.sh <vault>` desde uno que lo tenga |
+| `ya existe una tarea ajena` / `launch agent ajeno` | Otro vault con el mismo nombre de carpeta ya es dueño de esa entrada; renombra una de las carpetas |
+| `propiedad de cron heredada o no soportada` | Manifiesto de una versión temprana, que nunca se migra solo: quita a mano sus entradas programadas, borra `.opencode/brain-vault-install-manifest.json` y repite `install.sh` |
 | `refusing to modify a symlinked… opencode.json` / sin identidad git | `--with-mcp` exige `opencode.json` regular; configura `user.name` / `user.email` antes de instalar |
 
 ## Privacidad
@@ -218,11 +233,12 @@ ai-brain-opencode/
 ├── install.sh · uninstall.sh
 ├── plugin/brain-vault/index.js
 ├── scripts/{schedule,verify,check-personal-data}.sh · scripts/audit.py
-├── scripts/lib/ownership.py
+├── scripts/lib/{ownership,wire,brain_config}.py · scripts/lib/{common,python3}.sh
 ├── templates/brain-config.example.json
 ├── templates/commands/*.md
 ├── templates/jobs/*.sh
-├── tests/run.sh
+├── tests/run.sh · .github/workflows/ci.yml
+├── VERSION · CHANGELOG.md
 └── docs/COMPAT.md
 ```
 

@@ -73,9 +73,22 @@ con fixtures aislados. Desde un vault instalado, `bash <vault>/scripts/verify.sh
 locales, y **sale con código 1** si algo falla. Estas pruebas no arrancan OpenCode V2 ni comprueban que un runtime cargue los hooks; esa validación requiere
 un smoke test explícito de runtime y no se afirma aquí.
 
-## Registro de propiedad
+## Registro de propiedad y bibliotecas compartidas
 
-`install.sh`, `scripts/schedule.sh` y `uninstall.sh` comparten `scripts/lib/ownership.py`: un único lugar para el
-sellado, la validación y las huellas del manifiesto. `install.sh` copia ese archivo al vault, de modo que
-`<vault>/scripts/verify.sh` puede validar el manifiesto sin el checkout del paquete.
+Cada pieza de lógica vive en un solo lugar de `scripts/lib/`, y `install.sh` copia esa carpeta al vault para que
+`<vault>/scripts/verify.sh` y los trabajos programados funcionen sin el checkout del paquete:
 
+| Biblioteca | Responsabilidad única |
+|---|---|
+| `ownership.py` | Manifiesto: sellado, huellas, lista de rutas gestionadas, instalación que preserva lo ajeno, desinstalación e informe de deriva |
+| `wire.py` | Cableado del starter (symlinks en POSIX, copias en Windows) y poda de lo que el starter retiró; lo usan `install.sh` y `update-brain.sh` |
+| `brain_config.py` | Lectura de `brain-config.json`: valores por defecto, validación y fallback. El plugin (JavaScript) mantiene una copia de los valores por defecto que un test compara |
+| `common.sh` | Mensajes, detección de plataforma, intérprete Python y el arranque común de los trabajos (log con rotación, candado, timeout) |
+| `python3.sh` | Elección del intérprete (`python3`, `py -3`, `python`) en modo UTF-8 |
+
+Los trabajos programados salen de una única tabla en `scripts/schedule.sh` (nombre, clave del horario, días), de la
+que se derivan las líneas de cron, los launch agents y las tareas de `schtasks`. Los clones del vendor se registran
+por su origen git, no por huella: un `pull` no les quita el dueño.
+
+Las salidas de Python que lee el shell se emiten en UTF-8 y con saltos de línea `\n` también en Windows, donde el
+intérprete nativo usaría `cp1252` y `\r\n`.

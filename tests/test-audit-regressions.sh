@@ -150,10 +150,13 @@ grep -q 'scripts/verify.sh' "$VAULT/.opencode/commands/diagnose.md" || fail "the
 
 # 8. The vault verifier sees a broken symlink on every platform (`find -xtype`
 #    is GNU-only and failed silently on macOS).
-ln -s "missing-target" "$VAULT/.opencode/commands/broken.md"
-bash "$VAULT/scripts/verify.sh" > "$TMP_ROOT/verify-broken.txt" 2>&1 || true
-grep -Fq '✗ symlinks rotos: 1' "$TMP_ROOT/verify-broken.txt" || fail "verify did not report the broken symlink"
-rm -f "$VAULT/.opencode/commands/broken.md"
+#    Windows (MINGW/MSYS) requires Developer Mode or admin rights for symlinks;
+#    skip this subtest there.
+if ln -s "missing-target" "$VAULT/.opencode/commands/broken.md" 2>/dev/null; then
+  bash "$VAULT/scripts/verify.sh" > "$TMP_ROOT/verify-broken.txt" 2>&1 || true
+  grep -Fq '✗ symlinks rotos: 1' "$TMP_ROOT/verify-broken.txt" || fail "verify did not report the broken symlink"
+  rm -f "$VAULT/.opencode/commands/broken.md"
+fi
 
 # 9. Verify reports drift: a deleted managed file fails, a user-edited one is only noted.
 printf 'edited by the user\n' >> "$VAULT/scripts/jobs/update-brain.sh"

@@ -35,6 +35,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   para Claude Code.
 - **Test del commit base:** comparaba nombres con emoji contra la salida de git, que los entrecomilla por defecto;
   fallaba en cualquier equipo.
+- **CI en GitHub Actions:** fijado `ubuntu-24.04` para soportar Python 3.9 (retirado en 26.04), actualizado Node a 22
+  y protegido el test de symlinks rotos en entornos Windows sin privilegios de enlace simbólico.
 - **`/audit`:** un vault recién instalado mostraba 38 enlaces rotos de las notas de piso del vendor. La auditoría
   revisa solo tu contenido: `⚙️ Meta/Floors`, `⚙️ Meta/scripts`, `scripts/` y los archivos raíz (`AGENTS.md`,
   `CLAUDE.md`…) quedan fuera, y una carpeta tuya llamada `docs`, `templates` o `tests` ya no se omite.

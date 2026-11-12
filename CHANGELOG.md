@@ -15,6 +15,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   para probar otro commit del starter.
 
 ### Corregido
+- **Carpetas del vault nombradas en 26 archivos:** un test lee cada mención y exige que exista en
+  `vault_layout.py`; la ruta de las notas de piso y la de `📝 Notes/Raw` dejan de repetirse como literal.
 - **`/diagnose` daba el vault por roto:** el del starter audita una instalación de Claude Code. El paquete trae
   ahora el suyo (ejecuta `verify.sh`, `audit.py` y revisa los logs de los trabajos) y `wire.py` no copia el del
   vendor (`REPLACED_COMMANDS` en `vault_layout.py`).

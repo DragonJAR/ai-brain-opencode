@@ -371,8 +371,8 @@ if [ "$WIRE" = 0 ]; then
   owner_manifest adopt-clone ".opencode/skills/ai-brain-starter" "$STARTER_REPO" || warn "no se pudo migrar el registro del starter"
   owner_manifest adopt-clone ".opencode/skills/humanizer" "$HUMANIZER_REPO" || warn "no se pudo migrar el registro de humanizer"
   if [ -d "$R/floors" ]; then
-    floors_copied="$(copy_new_floors "$R/floors" "$VAULT/⚙️ Meta/Floors")" || warn "no se pudieron copiar todas las notas de piso"
-    ok "$(find "$VAULT/⚙️ Meta/Floors" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ') notas de piso (${floors_copied:-0} nuevas)"
+    floors_copied="$(copy_new_floors "$R/floors" "$VAULT/$BRAIN_FLOORS_REL")" || warn "no se pudieron copiar todas las notas de piso"
+    ok "$(find "$VAULT/$BRAIN_FLOORS_REL" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ') notas de piso (${floors_copied:-0} nuevas)"
   fi
 else
   ok "pisos y datos personales preservados (--wire)"

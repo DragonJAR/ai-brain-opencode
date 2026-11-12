@@ -11,6 +11,9 @@ BRAIN_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # shellcheck disable=SC2034  # la usan los scripts que cargan esta biblioteca
 BRAIN_MANIFEST_REL=".opencode/brain-vault-install-manifest.json"
+# Dónde viven las notas de piso del usuario (el instalador y update-brain copian allí las nuevas).
+# shellcheck disable=SC2034
+BRAIN_FLOORS_REL="⚙️ Meta/Floors"
 
 say()  { printf '%s\n' "$*"; }
 ok()   { printf '  + %s\n' "$*"; }

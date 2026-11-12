@@ -21,11 +21,11 @@ No cargues el skill `ai-brain-starter` (el `setup-brain` del vendor): está escr
    - Hábitos que quiere seguir y sobre qué quiere que se le exija cuentas.
 
 3. **Escribe las respuestas**:
-   - En `AGENTS.md`, solo en esas secciones personales y en las líneas de "Idioma" y "Diario" de la adaptación OpenCode. No toques las reglas ni el Vault Map.
+   - En `AGENTS.md`, solo en esas secciones personales y en la adaptación OpenCode: las líneas de "Idioma" y "Diario", y las de "Scheduler" que repiten la hora del diario y la zona horaria (deben decir lo mismo que la config). No toques las reglas ni el Vault Map.
    - En `⚙️ Meta/brain-config.json`: `language`, `timezone`, `journal.time`, `habits`, `accountability`. Debe seguir siendo JSON estricto; conserva las demás claves tal como están.
    - Si `CLAUDE.md` no es un enlace a `AGENTS.md` (Windows), copia `AGENTS.md` sobre `CLAUDE.md`.
 
-4. **Comprueba**: ejecuta `bash scripts/verify.sh` y corrige lo que marque sobre la configuración.
+4. **Comprueba**: ejecuta `bash scripts/verify.sh` y corrige lo que marque sobre la configuración. Busca en `AGENTS.md` la hora y la zona horaria anteriores: no debe quedar ninguna.
 
 5. **Cierra** con un resumen de lo que quedó escrito y dos avisos:
    - Si cambió la hora del diario y hay trabajos programados, hay que reprogramarlos desde el checkout del paquete: `bash install.sh <vault> --wire --with-schedule`.

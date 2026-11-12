@@ -167,7 +167,9 @@ for line in generated_path.read_text(encoding="utf-8").splitlines(keepends=True)
     if not any(existing.rstrip("\r\n") == value for existing in current):
         current.append(line)
         owned.append(value)
-output_path.write_text("".join(current), encoding="utf-8", newline="")
+# write_text only accepts a newline argument from Python 3.10; open() keeps 3.9 working.
+with open(output_path, "w", encoding="utf-8", newline="") as handle:
+    handle.write("".join(current))
 sys.stdout.reconfigure(encoding="utf-8", newline="\n")
 print(json.dumps(owned, ensure_ascii=False, separators=(",", ":")))
 PY

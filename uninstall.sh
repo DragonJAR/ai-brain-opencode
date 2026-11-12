@@ -45,6 +45,11 @@ for rel in "scripts" "scripts/jobs" ".opencode" ".opencode/skills" ".opencode/pl
   fi
 done
 
+# Sin un manifiesto válido nada es demostrable: ni la programación ni los archivos se tocan.
+if ! MANIFEST_ERROR="$(run_python "$LIB/ownership.py" "$MANIFEST" check-uninstall "$VAULT" 2>&1)"; then
+  die "manifiesto de propiedad ausente o inválido; no se eliminó nada (${MANIFEST_ERROR#fallo: }). Revisa $MANIFEST o borra a mano lo que sepas que instaló el paquete"
+fi
+
 if [ "$DRY_RUN" = 1 ]; then
   echo "== Trabajos programados que se eliminarían (dry-run) =="
   bash "$PKG/scripts/schedule.sh" "$VAULT" --remove --dry-run \
@@ -58,7 +63,8 @@ fi
 
 echo "== Eliminando artefactos del paquete sin cambios =="
 # La lista de rutas gestionadas y las comprobaciones viven en ownership.py.
-run_python "$LIB/ownership.py" "$MANIFEST" uninstall "$VAULT" "$PURGE" "$DRY_RUN"
+run_python "$LIB/ownership.py" "$MANIFEST" uninstall "$VAULT" "$PURGE" "$DRY_RUN" \
+  || die "desinstalación incompleta; revisa los ✗ de arriba. El manifiesto de propiedad se preservó"
 
 echo
 echo "Listo. El contenido sin propiedad, modificado o ambiguo se preservó."

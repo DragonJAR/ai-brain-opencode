@@ -23,6 +23,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   configuración con claves, tus agentes, el manifiesto y los clones del vendor como gitlinks). Ahora confirma solo
   las rutas del manifiesto y lo que esa instalación creó; un `.gitignore` existente se completa con las líneas que
   faltan (sin pisarlo) y las rutas que tu `.gitignore` ignora se omiten en vez de abortar la instalación.
+- **Manifiesto de propiedad:** la instalación, la desinstalación, `schedule.sh` y la actualización semanal lo
+  escriben bajo un mismo candado (`.opencode/.manifest.lock`); dos escrituras simultáneas ya no pierden registros.
+  Las rutas con `\`, unidad o `:` se rechazan y ninguna ruta registrada puede salir del vault.
+- **`uninstall.sh` sin manifiesto válido:** decía "Listo" y salía con 0. Ahora sale con error antes de tocar la
+  programación o los archivos y explica que no se eliminó nada. Sin `--purge-clones`, el `.gitignore` que oculta
+  los clones del vendor se conserva mientras ellos sigan ahí.
 - **Linux:** el recordatorio del diario busca el bus de sesión en `$XDG_RUNTIME_DIR` cuando está definido, antes de
   `/run/user/<uid>`.
 

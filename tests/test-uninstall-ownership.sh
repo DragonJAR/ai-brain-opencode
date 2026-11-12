@@ -313,7 +313,12 @@ ln -s "$TMP_ROOT/legacy-command.md" "$LEGACY_VAULT/.opencode/commands/journal.md
 printf '%s\n' 'not a valid ownership manifest' > "$LEGACY_VAULT/.opencode/brain-vault-install-manifest.json"
 cp "$MOCK_CRONTAB_STATE" "$TMP_ROOT/crontab-before-legacy"
 cp "$MOCK_CRONTAB_WRITES" "$TMP_ROOT/writes-before-legacy"
-bash "$PKG/uninstall.sh" "$LEGACY_VAULT" > "$TMP_ROOT/legacy-uninstall-output.txt"
+legacy_rc=0
+bash "$PKG/uninstall.sh" "$LEGACY_VAULT" > "$TMP_ROOT/legacy-uninstall-output.txt" 2>&1 || legacy_rc=$?
+if [ "$legacy_rc" -eq 0 ]; then
+  printf 'FAIL: uninstall with an invalid manifest exited 0 instead of failing closed\n' >&2
+  failures=$((failures + 1))
+fi
 expect_contains "$LEGACY_VAULT/.opencode/plugins/brain-vault/index.js" 'legacy plugin'
 expect_contains "$LEGACY_VAULT/scripts/jobs/journal-reminder.sh" 'legacy job'
 expect_exists "$LEGACY_VAULT/.opencode/commands/journal.md"

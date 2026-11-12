@@ -94,7 +94,8 @@ def scan_vault(vault_dir: pathlib.Path) -> dict:
     untyped_notes = []
     total_wikilinks = 0
 
-    def resolve_link(target: str, source_rel: str) -> str | None:
+    # Sin `str | None`: esa sintaxis en una anotación falla en Python 3.9, el mínimo documentado.
+    def resolve_link(target, source_rel):
         target_norm = target.strip().replace("\\", "/").strip("/")
         if not target_norm:
             return None
@@ -280,6 +281,12 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true", help="Mostrar listados completos")
 
     args = parser.parse_args()
+    # UTF-8 también en Windows, donde la consola usaría cp1252 y los símbolos del informe fallarían.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     vault_path = pathlib.Path(args.vault).resolve()
     if not vault_path.is_dir():
         sys.stderr.write(f"Error: la ruta indicada no es un directorio: {vault_path}\n")

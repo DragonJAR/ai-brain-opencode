@@ -26,10 +26,10 @@ ai_brain_mock_opencode "$BIN"
 # shellcheck disable=SC2088  # literal vendor text, never expanded
 CLAUDE_HOME='~/.claude'
 CLAUDE_BOOTSTRAP="$CLAUDE_HOME/skills/ai-brain-starter/bootstrap.sh"
-OPENCODE_BOOTSTRAP='.opencode/skills/ai-brain-starter/bootstrap.sh'
+UPDATE_JOB='scripts/jobs/update-brain.sh'
 COMMAND_SRC="$TMP_ROOT/command.md"
-printf -- '---\ndescription: "Journal"\n---\n\nInvoke the `daily-journal` skill via the Skill tool. If it is missing, suggest running `bash %s` to install it.\n' \
-  "$CLAUDE_BOOTSTRAP" > "$COMMAND_SRC"
+printf -- '---\ndescription: "Journal"\n---\n\nInvoke the `daily-journal` skill via the Skill tool. If it is missing, suggest running `bash %s` to install it.\nThe setup script is %s.\n' \
+  "$CLAUDE_BOOTSTRAP" "$CLAUDE_BOOTSTRAP" > "$COMMAND_SRC"
 TEMPLATE="$TMP_ROOT/template.md"
 printf '# Vault\n\nUse the Skill tool; setup: `bash %s`.\n\n## Vault Map\n[FILL THIS IN]\n' "$CLAUDE_BOOTSTRAP" > "$TEMPLATE"
 
@@ -46,14 +46,16 @@ assert_opencode_text() {
   grep -q 'Skill tool' "$file" && fail "$what still says 'Skill tool'"
   grep -Fq "$CLAUDE_HOME" "$file" && fail "$what still points at $CLAUDE_HOME"
   grep -Fq '`skill` tool' "$file" || fail "$what does not name OpenCode's \`skill\` tool"
-  grep -Fq "$OPENCODE_BOOTSTRAP" "$file" || fail "$what does not point at the vault's $OPENCODE_BOOTSTRAP"
+  grep -Fq "bash $UPDATE_JOB" "$file" || fail "$what does not suggest the vault's update job (bash $UPDATE_JOB)"
+  grep -Fq 'bootstrap.sh' "$file" && fail "$what still suggests the vendor bootstrap.sh"
   return 0
 }
 
-# 1. POSIX install: a rewritten copy, recorded by hash, whose bootstrap path exists.
+# 1. POSIX install: a rewritten copy, recorded by hash, whose suggested job exists.
 [ -f "$CMD" ] && [ ! -L "$CMD" ] || fail "the starter command is not a regular copy on POSIX"
 assert_opencode_text "$CMD" "the wired starter command"
-[ -f "$V/$OPENCODE_BOOTSTRAP" ] || fail "the rewritten bootstrap path does not exist in the vault"
+grep -Fq "The setup script is $UPDATE_JOB." "$CMD" || fail "a bare bootstrap.sh path was not rewritten to $UPDATE_JOB"
+[ -f "$V/$UPDATE_JOB" ] || fail "the suggested update job does not exist in the vault"
 assert_opencode_text "$V/AGENTS.md" "AGENTS.md"
 record() {
   python3 - "$MANIFEST" "$CMD" <<'PY'
@@ -75,6 +77,23 @@ PY
 cp "$CMD" "$TMP_ROOT/posix.md"
 python3 "$PKG/scripts/lib/wire.py" "$V" --mode copy --only commands > /dev/null 2>&1 || fail "wire.py --mode copy failed"
 cmp -s "$CMD" "$TMP_ROOT/posix.md" || fail "copy mode wrote different bytes than link mode"
+
+# 2b. A copy written by an older rewrite (bootstrap.sh path) is refreshed on re-wire.
+python3 - "$PKG/scripts/lib" "$MANIFEST" "$CMD" <<'PY'
+import hashlib, sys
+sys.path.insert(0, sys.argv[1])
+import ownership
+path = sys.argv[3]
+old = open(path, encoding="utf-8").read().replace(
+    "scripts/jobs/update-brain.sh", ".opencode/skills/ai-brain-starter/bootstrap.sh")
+open(path, "w", encoding="utf-8").write(old)
+data = ownership.load(sys.argv[2])
+data["files"][".opencode/commands/brain-journal.md"]["sha256"] = hashlib.sha256(old.encode("utf-8")).hexdigest()
+ownership.save(sys.argv[2], data)
+PY
+python3 "$PKG/scripts/lib/wire.py" "$V" --mode link > /dev/null 2>&1 || fail "re-wire over an older copy failed"
+assert_opencode_text "$CMD" "a copy re-wired from an older rewrite"
+[ "$(record)" = copy ] || fail "the refreshed older copy is not recorded by its new hash"
 
 # 3. A vendor change refreshes an unchanged copy.
 STARTER_CMD="$V/.opencode/skills/ai-brain-starter/commands/brain-journal.md"

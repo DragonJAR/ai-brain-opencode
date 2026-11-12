@@ -36,7 +36,13 @@ RESERVED = {pathlib.PurePosixPath(rel).name for rel in ownership.VENDOR_CLONES}
 # Sections copied and rewritten on every platform.
 REWRITTEN = {"commands"}
 # Claude Code wording in vendor text -> OpenCode, in order. install.sh applies it to AGENTS.md too.
+# The vendor bootstrap.sh installs Homebrew and Claude Code and writes ~/.claude;
+# in a vault the update job is what fetches and re-wires the starter.
+UPDATE_JOB_REL = "scripts/jobs/update-brain.sh"
+
 OPENCODE_REWRITES = (
+    ("bash ~/.claude/skills/ai-brain-starter/bootstrap.sh", "bash " + UPDATE_JOB_REL),
+    ("~/.claude/skills/ai-brain-starter/bootstrap.sh", UPDATE_JOB_REL),
     ("~/.claude/skills/ai-brain-starter", ownership.STARTER_REL),
     ("~/.claude/skills/humanizer", ".opencode/skills/humanizer"),
     ("the Skill tool", "the `skill` tool"),

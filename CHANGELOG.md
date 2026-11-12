@@ -38,6 +38,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **`verify.sh`:** el chequeo de cableado contaba los comandos del paquete y, en Windows, el clon de humanizer
   como skill copiada; ahora cuenta solo lo cableado desde el starter. Los symlinks rotos se buscan también en
   `⚙️ Meta/scripts` y en `CLAUDE.md`.
+- **Candado de los trabajos:** dos ejecuciones simultáneas sobre un candado viejo podían correr ambas, y un candado
+  recién creado sin pid se trataba como abandonado. Ahora solo una ejecución lo toma, un candado sin pid se respeta
+  hasta que tiene 10 minutos, y el log se rota solo bajo el candado.
+- **Tiempo límite de los trabajos:** al agotarse mataba solo el proceso hijo y dejaba vivos sus descendientes
+  (p. ej. el servidor de `opencode run`). Ahora mata todo el grupo de procesos (TERM y luego KILL) y en Git Bash
+  usa `taskkill /T /F` (simulado en las pruebas; pendiente de validar en una máquina Windows real).
 - **`check-personal-data.sh`:** no veía correos dentro de archivos binarios, una lista de términos con CRLF no
   coincidía con nada y una línea vacía en ella marcaba todo el paquete. Además, cualquier línea con "humanizer"
   quedaba exenta; ahora solo se eximen las URL de los clones del vendor. Los `#` de la lista son comentarios.

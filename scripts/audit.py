@@ -22,20 +22,23 @@ WIKILINK_RE = re.compile(r"\[\[([^\]|#\r\n]+)(?:#[^\]|\r\n]*)?(?:\|[^\]\r\n]*)?\
 FRONTMATTER_RE = re.compile(r"^---\r?\n([\s\S]*?)\r?\n---")
 TYPE_ATTR_RE = re.compile(r"^type:\s*(\S+)", re.MULTILINE)
 
+# Never walked, at any depth (dot directories are skipped as well).
 EXCLUDED_DIRS = {
-    ".git",
-    ".opencode",
-    ".obsidian",
-    ".trash",
-    ".codegraph",
-    ".atl",
-    "odd",
     "node_modules",
     "__pycache__",
-    "docs",
-    "templates",
-    "tests",
 }
+
+# Package/vendor areas, anchored at the vault root: their files stay valid link
+# targets but are not audited, so a user folder with the same name still is.
+ROOT_EXCLUDED_PATHS = (
+    "odd/",
+    "docs/",
+    "templates/",
+    "tests/",
+    "scripts/",
+    "⚙️ Meta/Floors/",
+    "⚙️ Meta/scripts/",
+)
 
 ROOT_EXCLUDED_FILES = {
     "AGENTS.md",
@@ -73,6 +76,12 @@ def strip_code_blocks(text: str) -> str:
     return text
 
 
+def is_audited(rel_path: str) -> bool:
+    if rel_path in ROOT_EXCLUDED_FILES:
+        return False
+    return not any(rel_path.startswith(prefix) for prefix in ROOT_EXCLUDED_PATHS)
+
+
 def scan_vault(vault_dir: pathlib.Path) -> dict:
     all_files = {}
     stems = {}
@@ -86,7 +95,7 @@ def scan_vault(vault_dir: pathlib.Path) -> dict:
             all_files[rel_path] = full_path
             stem_key = full_path.stem.lower()
             stems.setdefault(stem_key, []).append(rel_path)
-            if file.endswith(".md"):
+            if file.endswith(".md") and is_audited(rel_path):
                 rel_markdowns.append(rel_path)
 
     broken_links = []

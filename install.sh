@@ -6,7 +6,8 @@
 # Flags:
 #   --config <archivo>   brain-config.json para sembrar (por defecto: templates/brain-config.example.json)
 #   --wire               solo re-cablea un vault existente (ruta de actualización)
-#   --with-mcp           agrega los MCP remotos granola + chatprd (opt-in: envían tu conversación cuando los usas)
+#   --with-mcp           agrega los MCP remotos de scripts/lib/vault_layout.py: granola y chatprd
+#                        (opt-in: envían tu conversación cuando los usas)
 #   --with-obsidian      instala los complementos de Obsidian en el vault
 #   --with-schedule      instala los trabajos programados (launchd en macOS, cron en Linux, schtasks en Windows)
 #   --dry-run            valida los requisitos y muestra el plan sin tocar el vault
@@ -26,7 +27,7 @@ LIB="$PKG/scripts/lib"
 OS="$(uname -s)"
 VAULT="" CONFIG="" WIRE=0 WITH_MCP=0 WITH_OBSIDIAN=0 WITH_SCHEDULE=0 DRY_RUN=0
 
-for required in common.sh python3.sh ownership.py wire.py brain_config.py; do
+for required in common.sh python3.sh ownership.py wire.py brain_config.py vault_layout.py; do
   [ -f "$LIB/$required" ] || { printf '  ✗ paquete incompleto: falta scripts/lib/%s. No se modificó el vault\n' "$required" >&2; exit 1; }
 done
 # shellcheck source=scripts/lib/common.sh
@@ -208,9 +209,10 @@ echo "== 1. Carpetas canónicas del vault =="
 # Paths this run wrote outside the manifest; only they (and the manifest's) enter the base commit.
 BASE_PATHS=()
 if [ "$WIRE" = 0 ]; then
-  for d in "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "📝 Notes/Raw" "💼 Business/Engagements" "🚀 I+D/Herramientas" "🚀 I+D/Investigación" \
-           "⚙️ Meta/Folder Resolvers" "⚙️ Meta/scripts" "⚙️ Meta/Sessions" "⚙️ Meta/Decisions" "⚙️ Meta/Workflows" \
-           "⚙️ Meta/Facts" "⚙️ Meta/Exceptions" "⚙️ Meta/Floors" "⚙️ Meta/logs" ".opencode/commands" ".opencode/plugins"; do
+  VAULT_DIRS=()
+  while IFS= read -r d; do VAULT_DIRS+=("$d"); done < <(run_python "$LIB/vault_layout.py" folders | tr -d '\r')
+  [ "${#VAULT_DIRS[@]}" -gt 0 ] || die "no se pudo leer la lista de carpetas (scripts/lib/vault_layout.py)"
+  for d in "${VAULT_DIRS[@]}" ".opencode/commands" ".opencode/plugins"; do
     if ! ensure_vault_dir "$d"; then
       warn "directorio symlink o ruta incompatible preservada: $d"
       continue
@@ -447,6 +449,7 @@ install_files \
   "scripts/lib/common.sh" "$LIB/common.sh" 0644 \
   "scripts/lib/wire.py" "$LIB/wire.py" 0644 \
   "scripts/lib/brain_config.py" "$LIB/brain_config.py" 0644 \
+  "scripts/lib/vault_layout.py" "$LIB/vault_layout.py" 0644 \
   "scripts/lib/brain-config.defaults.json" "$EXAMPLE" 0644
 ok "$MANAGED utilidades del vault (verify, audit, bibliotecas)"
 
@@ -470,29 +473,34 @@ fi
 if [ "$WITH_MCP" = 1 ]; then
   echo "== 12. MCP remotos (opt-in) =="
   # El vault ya está instalado: un fallo aquí se avisa y se omite, nunca aborta.
+  MCP_NAMES="$(run_python "$LIB/vault_layout.py" mcp-names | tr -d '\r' | paste -sd ',' - | sed 's/,/, /g')"
   if [ -L "$VAULT/opencode.json" ]; then
     warn "opencode.json es un symlink; se preservó sin modificarlo"
   elif [ -e "$VAULT/opencode.jsonc" ] || [ -L "$VAULT/opencode.jsonc" ]; then
-    warn "existe opencode.jsonc: se omitió la configuración MCP para no crear una segunda configuración; agrega a mano granola y chatprd"
+    warn "existe opencode.jsonc: se omitió la configuración MCP para no crear una segunda configuración; agrega a mano $MCP_NAMES"
   else
     OPENCODE_EXISTED=0
     if [ -e "$VAULT/opencode.json" ]; then OPENCODE_EXISTED=1; fi
-    if ! MCP_ADDED="$(run_python - "$VAULT/opencode.json" 2>&1 <<'PY'
+    if ! MCP_ADDED="$(run_python - "$VAULT/opencode.json" "$LIB" 2>&1 <<'PY'
 import json, pathlib, sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[2])
+from vault_layout import MCP_SERVERS
+names = ", ".join(MCP_SERVERS)
 p = pathlib.Path(sys.argv[1])
 if p.exists() and (p.is_symlink() or not p.is_file() or p.stat().st_nlink != 1):
     raise SystemExit("refusing to modify a symlinked, non-regular, or hard-linked opencode.json")
 try:
     d = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"$schema": "https://opencode.ai/config.json"}
 except ValueError:
-    raise SystemExit("opencode.json no es JSON estricto (¿comentarios o comas finales?); agrega a mano granola y chatprd")
+    raise SystemExit("opencode.json no es JSON estricto (¿comentarios o comas finales?); agrega a mano " + names)
 if not isinstance(d, dict):
     raise SystemExit("refusing to modify opencode.json with a non-object root")
 servers = d.setdefault("mcp", {}).setdefault("servers", {})
 if not isinstance(servers, dict):
     raise SystemExit("refusing to modify a non-object mcp.servers configuration")
 added = {}
-for name, url in {"granola": "https://mcp.granola.ai/mcp", "chatprd": "https://app.chatprd.ai/mcp"}.items():
+for name, url in MCP_SERVERS.items():
     if name not in servers:
         servers[name] = {"type": "remote", "url": url}
         added[name] = servers[name]
@@ -504,7 +512,7 @@ PY
       warn "se omitió la configuración MCP: $MCP_ADDED"
     else
       if [ "$MCP_ADDED" != "{}" ] && ! owner_manifest record-config "$MCP_ADDED"; then
-        warn "no se pudo registrar la configuración MCP; la desinstalación no quitará granola ni chatprd"
+        warn "no se pudo registrar la configuración MCP; la desinstalación no quitará $MCP_NAMES"
       fi
       if [ "$OPENCODE_EXISTED" = 0 ] && [ -f "$VAULT/opencode.json" ]; then BASE_PATHS+=("opencode.json"); fi
       ok "MCP remotos configurados sin sobrescribir entradas existentes"

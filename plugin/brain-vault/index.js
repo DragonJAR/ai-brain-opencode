@@ -137,6 +137,8 @@ function vaultRelative(vaultDir, filePath) {
 
 const stripVS16 = (str) => String(str ?? "").replace(/\uFE0F/g, "")
 
+// Copy of NOTE_TYPES in scripts/lib/vault_layout.py (OpenCode loads this file without
+// Python); tests/test-vault-layout-single-source.sh fails when they differ.
 const FOLDER_TYPES = [
   ["📓 Journals/", "journal"],
   ["👤 CRM/", "person"],

@@ -55,6 +55,10 @@ import sys
 import time
 import uuid
 
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import vault_layout  # noqa: E402
+
 MANIFEST_REL = ".opencode/brain-vault-install-manifest.json"
 REQUIRED_KEYS = ("files", "symlinks", "config", "cron_lines", "launch_agents", "trees")
 REQUIRED_DICTS = ("files", "symlinks", "config", "launch_agents", "trees")
@@ -79,12 +83,13 @@ MANAGED_FILES = frozenset({
     "scripts/lib/common.sh",
     "scripts/lib/wire.py",
     "scripts/lib/brain_config.py",
+    "scripts/lib/vault_layout.py",
     "scripts/lib/brain-config.defaults.json",
 })
 MANAGED_DIRS = (".opencode/plugins/brain-vault", "scripts/lib", "scripts/jobs", "scripts")
 # Vendor and package content wired into the vault: symlinks on POSIX, copies on Windows.
 WIRED_DIRS = (".opencode/skills", ".opencode/commands", "⚙️ Meta/scripts")
-MCP_SERVERS = ("granola", "chatprd")
+MCP_SERVERS = tuple(vault_layout.MCP_SERVERS)
 MCP_RECORD_PREFIX = "opencode.json:mcp.servers."
 # Lines the vault .gitignore needs: an existing file is completed, never replaced.
 GITIGNORE_LINES = (

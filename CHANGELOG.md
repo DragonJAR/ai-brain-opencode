@@ -85,6 +85,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 ### Añadido
 - `tests/run.sh` descubre también `tests/test-*.mjs`; regresiones para la salida UTF-8 de `/audit`, el bus de
   `notify-send`, la limpieza de `AGENTS.md` y el aviso falso de symlink al reinstalar.
+- `scripts/lib/vault_layout.py` (también en `<vault>/scripts/lib/`): la única lista de carpetas del vault y de
+  servidores MCP remotos. La usan la instalación, `verify.sh`, `/audit`, la desinstalación y `--with-mcp`; el
+  plugin guarda una copia que un test compara.
 
 ## [0.2.0] - 2026-11-11
 

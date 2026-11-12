@@ -20,6 +20,11 @@ import re
 import sys
 import unicodedata
 
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "lib"))
+from vault_layout import ORPHAN_FOLDERS as CONTENT_FOLDERS_FOR_ORPHANS  # noqa: E402
+from vault_layout import RAW_PREFIX, TYPED_FOLDERS  # noqa: E402
+
 # Target, then an optional #heading or ^block, then an optional |alias.
 WIKILINK_RE = re.compile(r"\[\[([^\]|#^\r\n]+)(?:[#^][^\]|\r\n]*)?(?:\|[^\]\r\n]*)?\]\]")
 FRONTMATTER_RE = re.compile(r"^---\r?\n([\s\S]*?)\r?\n---")
@@ -56,27 +61,8 @@ ROOT_EXCLUDED_FILES = {
     "CHANGELOG.md",
 }
 
-TYPED_FOLDERS = (
-    "📓 Journals/",
-    "👤 CRM/",
-    "🏠 Home/",
-    "📝 Notes/",
-    "💼 Business/",
-    "🚀 I+D/",
-    "⚙️ Meta/Sessions/",
-    "⚙️ Meta/Decisions/",
-)
-
-# Immutable sources: never typed, never orphans; only the pending-ingest queue applies.
-RAW_PREFIX = "📝 Notes/Raw/"
-
-CONTENT_FOLDERS_FOR_ORPHANS = (
-    "📝 Notes/",
-    "👤 CRM/",
-    "🚀 I+D/",
-    "💼 Business/",
-)
-
+# TYPED_FOLDERS, CONTENT_FOLDERS_FOR_ORPHANS and RAW_PREFIX come from vault_layout.
+# Raw sources are immutable: never typed, never orphans; only the pending-ingest queue applies.
 
 def strip_code_blocks(text: str) -> list:
     """Devuelve las líneas sin código (bloques ``` o ~~~ y código inline), conservando la numeración."""

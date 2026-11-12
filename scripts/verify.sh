@@ -74,7 +74,13 @@ check "comandos ${WIRED_LABEL}os ($CMD)" [ "$CMD" -ge 1 ]
 # `find -xtype` es solo de GNU: en macOS fallaba en silencio y este chequeo pasaba siempre.
 BAD=$(find .opencode "⚙️ Meta/scripts" CLAUDE.md -type l ! -exec test -e {} \; -print 2>/dev/null | wc -l | tr -d ' ')
 if [ "$BAD" -eq 0 ]; then chk "sin symlinks rotos" 1; else chk "symlinks rotos: $BAD" 0; fi
-for d in "📓 Journals" "🏠 Home" "👤 CRM" "📝 Notes" "💼 Business" "🚀 I+D" "⚙️ Meta"; do
+ROOTS=()
+# shellcheck disable=SC2086  # PY3 puede ser "py -3"
+if [ -f scripts/lib/vault_layout.py ]; then
+  while IFS= read -r d; do ROOTS+=("$d"); done < <($PY3 scripts/lib/vault_layout.py roots 2>/dev/null | tr -d '\r')
+fi
+check "lista de carpetas del vault (scripts/lib/vault_layout.py)" [ "${#ROOTS[@]}" -gt 0 ]
+for d in ${ROOTS[@]+"${ROOTS[@]}"}; do
   check "carpeta $d" [ -d "$d" ]
 done
 CLAUDE_TARGET="AGENTS.md"
@@ -117,7 +123,7 @@ check "notas de piso ($FL)" [ "$FL" -ge 1 ]
 check "journal-config.md presente" [ -f "⚙️ Meta/journal-config.md" ]
 
 echo "== Propiedad de la instalación =="
-for lib in python3.sh common.sh ownership.py wire.py brain_config.py brain-config.defaults.json; do
+for lib in python3.sh common.sh ownership.py wire.py brain_config.py vault_layout.py brain-config.defaults.json; do
   check "scripts/lib/$lib presente" [ -f "scripts/lib/$lib" ]
 done
 OWNER="scripts/lib/ownership.py"

@@ -15,6 +15,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   para probar otro commit del starter.
 
 ### Corregido
+- **Temporales huérfanos:** `schedule.sh` corre con `set -e` y cinco de sus temporales no tenían `trap`: si el
+  script abortaba a medias quedaban en `TMPDIR`, y cada `trap EXIT` reemplazaba al anterior. Ahora `brain_mktemp` y
+  un solo manejador de salida en `scripts/lib/common.sh` borran los temporales y el candado de los trabajos.
 - **CI en Windows:** Git Bash copia el destino con `ln -s` (y falla si no existe) salvo que se pidan symlinks
   nativos; la suite se caía en el primer test que fabrica uno. `tests/lib/mocks.sh` pide symlinks nativos, prueba una
   vez si funcionan y los bloques que los necesitan imprimen `SKIP` donde no; el PATH sin `opencode` del contrato

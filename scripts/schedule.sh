@@ -102,7 +102,7 @@ remove_owned_agent() {
 # agent registrado que vive donde este paquete los escribe.
 for_owned_agents() {
   local callback="$1" list agent_path label
-  list="$(mktemp "${TMPDIR:-/tmp}/ai-brain-agents.XXXXXX")"
+  brain_mktemp list agents
   owner_manifest agents-tsv > "$list"
   while IFS=$'\t' read -r agent_path label; do
     [ -n "$agent_path" ] || continue
@@ -203,7 +203,7 @@ PY
 
 read_crontab() {
   local output="$1" errors rc
-  errors="$(mktemp "${TMPDIR:-/tmp}/ai-brain-crontab-error.XXXXXX")"
+  brain_mktemp errors crontab-error
   if crontab -l > "$output" 2> "$errors"; then
     rm -f "$errors"
     return 0
@@ -232,7 +232,7 @@ schtasks_native() {
 windows_task_names() {
   local csv rc=0
   # A un archivo y no a $(...): la salida puede ser UTF-16 (bytes NUL).
-  csv="$(mktemp "${TMPDIR:-/tmp}/ai-brain-schtasks.XXXXXX")"
+  brain_mktemp csv schtasks
   schtasks_native /Query /FO CSV /NH > "$csv" 2>/dev/null || { rm -f "$csv"; return 1; }
   # El CSV de schtasks es citado: los nombres de tarea pueden contener comas. Su
   # codificación depende de la consola (UTF-8, la página de códigos OEM o ANSI, o
@@ -351,7 +351,7 @@ windows_schedule() {
   if [ "$MODE" != "--dry-run" ]; then
     command -v schtasks >/dev/null 2>&1 || die "falta schtasks"
     owner_manifest init || die "manifiesto de propiedad inválido; no se cambió la programación"
-    staged="$(mktemp "${TMPDIR:-/tmp}/ai-brain-run.XXXXXX")"
+    brain_mktemp staged run
     write_windows_runner "$staged"
     owner_manifest install-files "$VAULT" "scripts/jobs/ai-brain-run.cmd" "$staged" - >/dev/null \
       || { rm -f "$staged"; die "no se pudo instalar scripts/jobs/ai-brain-run.cmd"; }
@@ -443,10 +443,9 @@ if [ "$MODE" = "--remove" ]; then
   elif [ "$OS" = "Darwin" ]; then
     for_owned_agents remove_owned_agent
   elif [ "$CRON_JSON" != "[]" ]; then
-    CURRENT="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-current.XXXXXX")"
-    GENERATED="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-empty.XXXXXX")"
-    UPDATED="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-updated.XXXXXX")"
-    trap 'rm -f "$CURRENT" "$GENERATED" "$UPDATED"' EXIT
+    brain_mktemp CURRENT cron-current
+    brain_mktemp GENERATED cron-empty
+    brain_mktemp UPDATED cron-updated
     read_crontab "$CURRENT" || { warn "no se pudo leer el crontab; se preservaron los registros de propiedad"; exit 1; }
     reconcile_crontab "$CURRENT" "$GENERATED" "$UPDATED" "$CRON_JSON" >/dev/null
     if [ "$REMOVE_DRY_RUN" = 1 ]; then
@@ -512,7 +511,7 @@ if [ "$OS" = "Darwin" ]; then
   install_agent() {
     local job="$1" time="$2" days="$3" label="$PREFIX.$1" plist
     if [ "$MODE" = "--dry-run" ]; then
-      plist="$(mktemp "${TMPDIR:-/tmp}/ai-brain-${label}.XXXXXX")"
+      brain_mktemp plist "$label"
     else
       plist="$AGENTS_DIR/$label.plist"
       if [ -L "$plist" ]; then warn "launch agent symlink preservado: $plist"; return 1; fi
@@ -600,10 +599,9 @@ PL
   [ "$SCHEDULE_FAILED" = 0 ] || die "no se pudieron instalar todos los launch agents; revisa los avisos"
 else
   MARK="# ai-brain $SLUG owner=$(owner_manifest instance)"
-  GENERATED="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-new.XXXXXX")"
-  CURRENT="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-current.XXXXXX")"
-  UPDATED="$(mktemp "${TMPDIR:-/tmp}/ai-brain-cron-updated.XXXXXX")"
-  trap 'rm -f "$GENERATED" "$CURRENT" "$UPDATED"' EXIT
+  brain_mktemp GENERATED cron-new
+  brain_mktemp CURRENT cron-current
+  brain_mktemp UPDATED cron-updated
   write_cron_lines "$MARK" > "$GENERATED"
   read_crontab "$CURRENT" || { warn "no se pudo leer el crontab; no se cambió la programación"; exit 1; }
   PREVIOUS="$(owner_manifest cron-json)"

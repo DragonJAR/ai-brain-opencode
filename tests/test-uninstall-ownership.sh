@@ -20,6 +20,7 @@ mkdir -p "$TMP_ROOT/bin" "$VAULT/.opencode/skills" "$VAULT/.opencode/commands" \
 ai_brain_mock_platform "$TMP_ROOT/bin"
 ai_brain_mock_crontab "$TMP_ROOT/bin"
 ai_brain_mock_git "$TMP_ROOT/bin"
+ai_brain_mock_opencode "$TMP_ROOT/bin"
 
 printf '%s\n' '# User-managed schedule' '0 4 * * * echo keep-me # ai-brain vault-user' > "$MOCK_CRONTAB_STATE"
 printf '%s\n' 'external note' > "$TMP_ROOT/foreign/ai-brain-starter-legacy/keep.md"

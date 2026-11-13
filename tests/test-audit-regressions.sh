@@ -261,8 +261,8 @@ printf 'v2\n' > "$ORIGIN/README.md"
 real_git -C "$ORIGIN" commit -q -am v2
 real_git -C "$TMP_ROOT/purge-clean/.opencode/skills/humanizer" pull -q --ff-only
 bash "$PKG/uninstall.sh" "$TMP_ROOT/purge-clean" --purge-clones > "$TMP_ROOT/purge-clean.txt" 2>&1 \
-  || fail "uninstall --purge-clones failed"
-[ ! -e "$TMP_ROOT/purge-clean/.opencode/skills/humanizer" ] || fail "--purge-clones kept a pristine clone after a pull"
+  || fail "uninstall --purge-clones failed: $(tail -5 "$TMP_ROOT/purge-clean.txt")"
+[ ! -e "$TMP_ROOT/purge-clean/.opencode/skills/humanizer" ] || fail "--purge-clones kept a pristine clone after a pull: $(grep -v "^  [+✓]" "$TMP_ROOT/purge-clean.txt" | tail -5)"
 purge_fixture "$TMP_ROOT/purge-dirty"
 printf 'local work\n' > "$TMP_ROOT/purge-dirty/.opencode/skills/humanizer/notes.md"
 bash "$PKG/uninstall.sh" "$TMP_ROOT/purge-dirty" --purge-clones > "$TMP_ROOT/purge-dirty.txt" 2>&1 || true

@@ -73,6 +73,7 @@ PRESERVED = 3
 # One list for install, uninstall and the drift report. A path outside it is
 # never removed, whatever the manifest says.
 VENDOR_CLONES = tuple(rel for rel, _url, _commit in vault_layout.VENDOR)
+VENDOR_PINS = {rel: commit for rel, _url, commit in vault_layout.VENDOR}
 STARTER_REL = VENDOR_CLONES[0]
 MANAGED_FILES = frozenset({
     ".opencode/plugins/brain-vault/index.js",
@@ -462,22 +463,26 @@ def owned_paths(data):
 
 
 # --- Vendor clones --------------------------------------------------------------
-# A clone changes on every pull, so it is owned by its origin, not by its bytes.
+# A clone moves with every pinned commit, so it is owned by its origin, not by its
+# bytes. It is pristine when deleting it loses nothing: a clean tree, HEAD on the
+# pinned commit or on a remote ref, and no local branch ahead of the remote.
 
-def clone_is_pristine(path, origin):
+def clone_is_pristine(path, origin, pinned=None):
     def git(*args):
-        return subprocess.run(["git", "-C", str(path)] + list(args), stdout=subprocess.PIPE,
-                              stderr=subprocess.DEVNULL, universal_newlines=True)
+        result = subprocess.run(["git", "-C", str(path)] + list(args), stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, universal_newlines=True)
+        return result.stdout.strip() if result.returncode == 0 else None
     if path.is_symlink() or not path.is_dir() or not (path / ".git").exists():
         return False
     try:
-        url = git("config", "--get", "remote.origin.url")
-        if url.returncode != 0 or url.stdout.strip() != origin:
+        if git("config", "--get", "remote.origin.url") != origin or git("status", "--porcelain") != "":
             return False
-        status = git("status", "--porcelain")
+        head = git("rev-parse", "HEAD")
+        head_published = head is not None and (
+            head == pinned or git("rev-list", "-n", "1", "HEAD", "--not", "--remotes") == "")
+        return head_published and git("rev-list", "-n", "1", "--branches", "--not", "--remotes") == ""
     except OSError:
         return False
-    return status.returncode == 0 and not status.stdout.strip()
 
 
 # --- Drift report ---------------------------------------------------------------
@@ -748,7 +753,8 @@ def uninstall(manifest, vault, purge, dry_run):
         for value, origin in data["clones"].items():
             if value in VENDOR_CLONES:
                 remove_tree(value, "clon del vendor",
-                            lambda target, origin=origin: clone_is_pristine(target, origin))
+                            lambda target, origin=origin, value=value:
+                                clone_is_pristine(target, origin, VENDOR_PINS.get(value)))
 
     if ".gitignore" in data["files"]:
         remaining = [rel for rel in VENDOR_CLONES

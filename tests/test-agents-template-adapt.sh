@@ -57,7 +57,6 @@ ai_brain_mock_git "$BIN"
 ai_brain_mock_opencode "$BIN"
 export PATH="$BIN:$PATH"
 export TMPDIR="$TMP_ROOT"
-export BRAIN_STARTER_UPDATE=0
 unset BRAIN_STARTER_PIN || true
 
 bash "$PKG/install.sh" "$VAULT" > "$TMP_ROOT/install.txt" 2>&1 \

@@ -26,7 +26,7 @@ ai_brain_mock_windows "$BIN"
 MOCK_GIT_CALLS="$TMP_ROOT/git-calls.log"
 : > "$MOCK_GIT_CALLS"
 export MOCK_UNAME=Linux MOCK_GIT_CALLS
-export PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT" BRAIN_STARTER_UPDATE=0
+export PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT"
 unset BRAIN_STARTER_PIN CDPATH || true
 
 install_vault() {

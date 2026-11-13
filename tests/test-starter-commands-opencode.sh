@@ -37,7 +37,7 @@ V="$TMP_ROOT/vault"
 CMD="$V/.opencode/commands/brain-journal.md"
 MANIFEST="$V/.opencode/brain-vault-install-manifest.json"
 if ! MOCK_UNAME=Linux MOCK_GIT_CLEAN=1 MOCK_VAULT="$V" MOCK_GIT_STARTER_COMMAND="$COMMAND_SRC" MOCK_GIT_STARTER_TEMPLATE="$TEMPLATE" \
-     BRAIN_STARTER_UPDATE=0 PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT" bash "$PKG/install.sh" "$V" > "$TMP_ROOT/install.out" 2>&1; then
+     PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT" bash "$PKG/install.sh" "$V" > "$TMP_ROOT/install.out" 2>&1; then
   fail "install failed: $(tail -3 "$TMP_ROOT/install.out")"
 fi
 
@@ -137,7 +137,7 @@ python3 "$PKG/scripts/lib/ownership.py" "$MANIFEST" uninstall "$V" 0 0 > "$TMP_R
 [ -f "$CMD" ] || fail "uninstall removed a user-edited command copy"
 
 W="$TMP_ROOT/vault-clean"
-MOCK_UNAME=Linux MOCK_GIT_CLEAN=1 MOCK_VAULT="$W" MOCK_GIT_STARTER_COMMAND="$COMMAND_SRC" BRAIN_STARTER_UPDATE=0 \
+MOCK_UNAME=Linux MOCK_GIT_CLEAN=1 MOCK_VAULT="$W" MOCK_GIT_STARTER_COMMAND="$COMMAND_SRC" \
   PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT" bash "$PKG/install.sh" "$W" > /dev/null 2>&1 || fail "second install failed"
 python3 "$PKG/scripts/lib/ownership.py" "$W/.opencode/brain-vault-install-manifest.json" uninstall "$W" 0 0 > /dev/null 2>&1 \
   || fail "uninstall of a clean vault failed"

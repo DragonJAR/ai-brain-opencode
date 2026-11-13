@@ -22,7 +22,7 @@ ai_brain_mock_platform "$BIN"
 ai_brain_mock_git "$BIN"
 ai_brain_mock_opencode "$BIN"
 export MOCK_UNAME=Linux MOCK_GIT_CLEAN=1
-export PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT" BRAIN_STARTER_UPDATE=0
+export PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT"
 unset BRAIN_STARTER_PIN || true
 
 mcp_records() {

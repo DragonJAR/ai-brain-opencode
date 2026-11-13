@@ -83,7 +83,7 @@ ai_brain_mock_platform "$BIN"
 ai_brain_mock_git "$BIN"
 ai_brain_mock_opencode "$BIN"
 V="$TMP_ROOT/vault"
-if ! MOCK_UNAME=Linux MOCK_GIT_CLEAN=1 MOCK_VAULT="$V" BRAIN_STARTER_UPDATE=0 PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT" \
+if ! MOCK_UNAME=Linux MOCK_GIT_CLEAN=1 MOCK_VAULT="$V" PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT" \
      bash "$PKG/install.sh" "$V" --with-mcp > "$TMP_ROOT/install.out" 2>&1; then
   fail "install failed: $(tail -3 "$TMP_ROOT/install.out")"
 fi

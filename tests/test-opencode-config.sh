@@ -27,7 +27,7 @@ export MOCK_UNAME=Linux MOCK_GIT_CALLS="$TMP_ROOT/git-calls.log"
 export MOCK_CRONTAB_STATE="$TMP_ROOT/crontab-state" MOCK_CRONTAB_CALLS="$TMP_ROOT/crontab-calls.log"
 export MOCK_CRONTAB_WRITES="$TMP_ROOT/crontab-writes.log"
 : > "$MOCK_CRONTAB_STATE"; : > "$MOCK_CRONTAB_CALLS"; : > "$MOCK_CRONTAB_WRITES"
-export PATH="$BIN:$PATH" TMPDIR="$TMP_ROOT" BRAIN_STARTER_UPDATE=0
+export PATH="$BIN:$PATH" TMPDIR="$TMP_ROOT"
 unset BRAIN_STARTER_PIN || true
 
 config_check() {  # <opencode.json> <python assertion body>

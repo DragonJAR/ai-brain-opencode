@@ -111,6 +111,30 @@ vendor_lock() {
   run_python "$BRAIN_LIB_DIR/vault_layout.py" vendor | tr -d '\r'
 }
 
+# --- Limpieza al salir ---------------------------------------------------------
+# Un solo `trap EXIT` por proceso: un segundo `trap` reemplaza al primero y deja
+# basura atrás. Los temporales y el candado de los trabajos se anotan aquí y se
+# borran juntos, también cuando el script aborta por `set -e` o `die`.
+# (Una sustitución `$(...)` no ejecuta este trap: lo que se cree dentro de una
+# función llamada así debe borrarse también de forma explícita.)
+BRAIN_CLEANUP=()
+brain_on_exit() {
+  [ "${#BRAIN_CLEANUP[@]}" -eq 0 ] || rm -rf -- "${BRAIN_CLEANUP[@]}"
+}
+trap brain_on_exit EXIT
+
+# brain_cleanup_add <ruta>: se borra al salir del script.
+brain_cleanup_add() { BRAIN_CLEANUP+=("$1"); }
+
+# brain_mktemp <variable> <nombre>: crea un temporal, lo deja en <variable> y lo
+# anota para borrarlo al salir.
+brain_mktemp() {
+  local __brain_tmp
+  __brain_tmp="$(mktemp "${TMPDIR:-/tmp}/ai-brain-$2.XXXXXX")" || return 1
+  BRAIN_CLEANUP+=("$__brain_tmp")
+  printf -v "$1" '%s' "$__brain_tmp"
+}
+
 # --- Trabajos programados ------------------------------------------------------
 # job_log_file <vault> <trabajo>: el único nombre de log de un trabajo. Lo usan
 # job_init y cada backend del scheduler, así la rotación cubre toda la salida.
@@ -144,7 +168,7 @@ job_init() {
     job_log "otra ejecución en curso (pid ${pid:-?}); omitido"
     exit 0
   fi
-  trap 'rm -rf "$JOB_LOCK"' EXIT
+  brain_cleanup_add "$JOB_LOCK"
   # Solo quien tiene el candado rota: otra ejecución puede estar escribiendo.
   if [ -f "$LOG" ]; then
     size="$(wc -c < "$LOG" | tr -d ' ')"

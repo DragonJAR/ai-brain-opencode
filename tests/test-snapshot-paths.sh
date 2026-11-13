@@ -50,6 +50,7 @@ out="$(list_paths 2> "$TMP_ROOT/err.txt")"
 BIN="$TMP_ROOT/bin"
 mkdir -p "$BIN"
 ai_brain_mock_platform "$BIN"
+ai_brain_mock_opencode "$BIN"
 printf '{"snapshot_paths": [".", "📓 Journals"]}\n' > "$BRC"
 if ! PATH="$BIN:$PATH" MOCK_UNAME=Linux bash "$PKG/install.sh" "$TMP_ROOT/dry-vault" --dry-run --config "$BRC" \
      > "$TMP_ROOT/install.txt" 2>&1; then

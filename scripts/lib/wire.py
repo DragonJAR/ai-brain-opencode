@@ -16,7 +16,6 @@ unchanged. Anything the vault owns differently is preserved and reported.
 
 import os
 import pathlib
-import shutil
 import sys
 
 sys.dont_write_bytecode = True
@@ -153,7 +152,7 @@ def prune(data, vault, vault_dir, wanted):
             pruned += drop(data["trees"], rel,
                            lambda target: not target.is_symlink() and target.is_dir()
                            and ownership.tree_hash(target) == expected,
-                           shutil.rmtree)
+                           ownership.rmtree)
         else:
             data["wired"].remove(rel)
     return pruned

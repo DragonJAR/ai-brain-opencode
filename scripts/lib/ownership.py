@@ -421,7 +421,7 @@ def put_tree(data, vault, rel, src):
     if dst.exists():
         if not dst.is_dir() or data["trees"].get(rel) != tree_hash(dst):
             return "árbol existente no administrado preservado: " + rel
-        shutil.rmtree(dst)
+        rmtree(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(src, dst, symlinks=True)
     data["trees"][rel] = tree_hash(dst)
@@ -454,6 +454,17 @@ def ensure_gitignore(data, vault):
         data["files"][".gitignore"] = file_info(target)
     print("  + .gitignore completado (%d líneas del paquete)" % len(missing))
     return None
+
+
+def rmtree(path):
+    """shutil.rmtree that also deletes read-only files (git objects on Windows)."""
+    def retry(func, target, _error):
+        os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+        func(target)
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(str(path), onexc=retry)
+    else:
+        shutil.rmtree(str(path), onerror=retry)
 
 
 def owned_paths(data):
@@ -733,7 +744,7 @@ def uninstall(manifest, vault, purge, dry_run):
             target = safe_target(vault, value)
             if unchanged(target):
                 if not dry_run:
-                    shutil.rmtree(target)
+                    rmtree(target)
                 print("  " + gone + " " + noun + " sin cambios " + value)
             elif target.exists() or target.is_symlink():
                 print("  ! " + noun + " modificado o no verificado, preservado: " + value)

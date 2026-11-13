@@ -150,9 +150,8 @@ grep -q 'scripts/verify.sh' "$VAULT/.opencode/commands/diagnose.md" || fail "the
 
 # 8. The vault verifier sees a broken symlink on every platform (`find -xtype`
 #    is GNU-only and failed silently on macOS).
-#    Windows (MINGW/MSYS) requires Developer Mode or admin rights for symlinks;
-#    skip this subtest there.
-if ln -s "missing-target" "$VAULT/.opencode/commands/broken.md" 2>/dev/null; then
+if ai_brain_need_symlinks "verify.sh detecta un symlink roto" \
+   && ln -s "missing-target" "$VAULT/.opencode/commands/broken.md" 2>/dev/null; then
   bash "$VAULT/scripts/verify.sh" > "$TMP_ROOT/verify-broken.txt" 2>&1 || true
   grep -Fq '✗ symlinks rotos: 1' "$TMP_ROOT/verify-broken.txt" || fail "verify did not report the broken symlink"
   rm -f "$VAULT/.opencode/commands/broken.md"

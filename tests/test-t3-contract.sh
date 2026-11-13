@@ -360,11 +360,11 @@ mkdir -p "$NO_OPENCODE_BIN" "$MISSING_VAULT"
 printf 'existing user data\n' > "$MISSING_VAULT/keep.txt"
 for command_name in dirname mkdir basename tr sed python3 node find wc ln readlink cp chmod ls cat grep date head tail rm cut sort; do
   if resolved="$(command -v "$command_name")"; then
-    ln -s "$resolved" "$NO_OPENCODE_BIN/$command_name"
+    ai_brain_shim "$NO_OPENCODE_BIN" "$command_name" "$resolved"
   fi
 done
-ln -s "$TMP_ROOT/bin/uname" "$NO_OPENCODE_BIN/uname"
-ln -s "$TMP_ROOT/bin/git" "$NO_OPENCODE_BIN/git"
+ai_brain_shim "$NO_OPENCODE_BIN" uname "$TMP_ROOT/bin/uname"
+ai_brain_shim "$NO_OPENCODE_BIN" git "$TMP_ROOT/bin/git"
 find "$MISSING_VAULT" -mindepth 1 -print | sort > "$TMP_ROOT/no-opencode-before.txt"
 if PATH="$NO_OPENCODE_BIN" MOCK_VAULT="$MISSING_VAULT" "$BASH_BIN" "$PKG/install.sh" "$MISSING_VAULT" > "$TMP_ROOT/no-opencode.txt" 2>&1; then
   fail "installer succeeded without the required OpenCode CLI"
@@ -401,30 +401,33 @@ check_claude() {
   printf '%s\n' "$status" > "$TMP_ROOT/claude-$name.exit"
 }
 
-check_claude good good
-if ! grep -Fq '✓ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-good.txt"; then
-  fail "verifier rejected a CLAUDE.md symlink whose real target is AGENTS.md"
-fi
-check_claude wrong wrong
-if ! grep -Fq '✗ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-wrong.txt"; then
-  fail "verifier accepted a CLAUDE.md symlink that does not resolve to AGENTS.md"
-fi
-if [ "$(cat "$TMP_ROOT/claude-wrong.exit")" -eq 0 ]; then
-  fail "verifier exited 0 when CLAUDE.md pointed elsewhere"
-fi
-check_claude absent absent
-if ! grep -Fq '✗ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-absent.txt"; then
-  fail "verifier accepted a vault without CLAUDE.md"
-fi
-if [ "$(cat "$TMP_ROOT/claude-absent.exit")" -eq 0 ]; then
-  fail "verifier exited 0 when CLAUDE.md was absent"
-fi
-check_claude regular file
-if ! grep -Fq '✗ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-regular.txt"; then
-  fail "verifier accepted a regular CLAUDE.md file"
-fi
-if [ "$(cat "$TMP_ROOT/claude-regular.exit")" -eq 0 ]; then
-  fail "verifier exited 0 when CLAUDE.md was a regular file"
+# The POSIX contract: CLAUDE.md is a symlink. (Windows installs a copy instead.)
+if ai_brain_need_symlinks "CLAUDE.md como symlink en verify.sh"; then
+  check_claude good good
+  if ! grep -Fq '✓ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-good.txt"; then
+    fail "verifier rejected a CLAUDE.md symlink whose real target is AGENTS.md"
+  fi
+  check_claude wrong wrong
+  if ! grep -Fq '✗ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-wrong.txt"; then
+    fail "verifier accepted a CLAUDE.md symlink that does not resolve to AGENTS.md"
+  fi
+  if [ "$(cat "$TMP_ROOT/claude-wrong.exit")" -eq 0 ]; then
+    fail "verifier exited 0 when CLAUDE.md pointed elsewhere"
+  fi
+  check_claude absent absent
+  if ! grep -Fq '✗ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-absent.txt"; then
+    fail "verifier accepted a vault without CLAUDE.md"
+  fi
+  if [ "$(cat "$TMP_ROOT/claude-absent.exit")" -eq 0 ]; then
+    fail "verifier exited 0 when CLAUDE.md was absent"
+  fi
+  check_claude regular file
+  if ! grep -Fq '✗ CLAUDE.md enlazado a AGENTS.md' "$TMP_ROOT/claude-regular.txt"; then
+    fail "verifier accepted a regular CLAUDE.md file"
+  fi
+  if [ "$(cat "$TMP_ROOT/claude-regular.exit")" -eq 0 ]; then
+    fail "verifier exited 0 when CLAUDE.md was a regular file"
+  fi
 fi
 
 # insights-weekly must fail visibly when opencode is missing, and run when it is present.

@@ -102,10 +102,11 @@ python3 "$PKG/scripts/lib/wire.py" "$V" --mode link > /dev/null 2>&1 || fail "re
 grep -Fq 'New vendor line for the `skill` tool.' "$CMD" || fail "an unchanged copy was not refreshed when the vendor changed"
 [ "$(record)" = copy ] || fail "the refreshed copy is not recorded by its new hash"
 
-# 4. A previous POSIX install recorded the command as a symlink: it becomes a copy.
-rm -f "$CMD"
-ln -s ../skills/ai-brain-starter/commands/brain-journal.md "$CMD"
-python3 - "$PKG/scripts/lib" "$MANIFEST" <<'PY'
+if ai_brain_need_symlinks "migración de un comando enlazado por una instalación POSIX anterior"; then
+  # 4. A previous POSIX install recorded the command as a symlink: it becomes a copy.
+  rm -f "$CMD"
+  ln -s ../skills/ai-brain-starter/commands/brain-journal.md "$CMD"
+  python3 - "$PKG/scripts/lib" "$MANIFEST" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1])
 import ownership
@@ -116,9 +117,10 @@ data["wired"] = [item for item in data["wired"] if item != rel]
 data["symlinks"][rel] = "../skills/ai-brain-starter/commands/brain-journal.md"
 ownership.save(sys.argv[2], data)
 PY
-python3 "$PKG/scripts/lib/wire.py" "$V" --mode link > "$TMP_ROOT/migrate.out" 2>&1 || fail "re-wire over a legacy symlink failed"
-[ -f "$CMD" ] && [ ! -L "$CMD" ] || fail "a legacy owned symlink was not replaced by a rewritten copy"
-[ "$(record)" = copy ] || fail "the legacy symlink record was not replaced by a copy record (got $(record))"
+  python3 "$PKG/scripts/lib/wire.py" "$V" --mode link > "$TMP_ROOT/migrate.out" 2>&1 || fail "re-wire over a legacy symlink failed"
+  [ -f "$CMD" ] && [ ! -L "$CMD" ] || fail "a legacy owned symlink was not replaced by a rewritten copy"
+  [ "$(record)" = copy ] || fail "the legacy symlink record was not replaced by a copy record (got $(record))"
+fi
 
 # 5. verify.sh counts the copies.
 (cd "$V" && PATH="$BIN:/usr/bin:/bin" bash scripts/verify.sh > "$TMP_ROOT/verify.out" 2>&1) || true

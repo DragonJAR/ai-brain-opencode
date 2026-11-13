@@ -147,15 +147,16 @@ fi
 # --- scripts/ symlink refuse: exit ≠ 0, manifest preserved, owned file intact -
 # Minimal sealed vault + scripts/ → symlink; expect exit≠0, byte-identical
 # manifest, owned.sh intact, and the verified refusal strings.
-SYMLINK_ROOT="$TMP_ROOT/symlink-refuse"
-# schedule --remove needs a mocked Linux crontab so uninstall reaches the Python guard.
-setup_install_env "$SYMLINK_ROOT"
-V="$SYMLINK_ROOT/vault"
-mkdir -p "$V/scripts/jobs" "$V/.opencode"
-printf '#!/usr/bin/env bash\necho owned\n' > "$V/scripts/jobs/owned.sh"
-chmod 755 "$V/scripts/jobs/owned.sh"
+if ai_brain_need_symlinks "uninstall rechaza scripts/ reemplazado por un symlink"; then
+  SYMLINK_ROOT="$TMP_ROOT/symlink-refuse"
+  # schedule --remove needs a mocked Linux crontab so uninstall reaches the Python guard.
+  setup_install_env "$SYMLINK_ROOT"
+  V="$SYMLINK_ROOT/vault"
+  mkdir -p "$V/scripts/jobs" "$V/.opencode"
+  printf '#!/usr/bin/env bash\necho owned\n' > "$V/scripts/jobs/owned.sh"
+  chmod 755 "$V/scripts/jobs/owned.sh"
 
-python3 - "$V" <<'PY'
+  python3 - "$V" <<'PY'
 import hashlib, json, pathlib, stat, sys
 vault = pathlib.Path(sys.argv[1]); target = vault/"scripts/jobs/owned.sh"; st = target.stat()
 data = {"format": 1, "owner": "ai-brain-opencode", "instance": "a"*32, "cron_ownership_version": 2,
@@ -168,37 +169,38 @@ data["seal"] = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", 
     json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
 PY
 
-MANIFEST_SYMLINK="$V/.opencode/brain-vault-install-manifest.json"
-cp "$MANIFEST_SYMLINK" "$SYMLINK_ROOT/mf.before"
-mv "$V/scripts" "$SYMLINK_ROOT/moved-scripts"
-ln -s "$SYMLINK_ROOT/moved-scripts" "$V/scripts"
+  MANIFEST_SYMLINK="$V/.opencode/brain-vault-install-manifest.json"
+  cp "$MANIFEST_SYMLINK" "$SYMLINK_ROOT/mf.before"
+  mv "$V/scripts" "$SYMLINK_ROOT/moved-scripts"
+  ln -s "$SYMLINK_ROOT/moved-scripts" "$V/scripts"
 
-set +e
-bash "$PKG/uninstall.sh" "$V" >"$SYMLINK_ROOT/uninstall.txt" 2>"$SYMLINK_ROOT/uninstall.err"
-symlink_rc=$?
-set -e
-cat "$SYMLINK_ROOT/uninstall.txt" "$SYMLINK_ROOT/uninstall.err" >"$SYMLINK_ROOT/uninstall.all"
+  set +e
+  bash "$PKG/uninstall.sh" "$V" >"$SYMLINK_ROOT/uninstall.txt" 2>"$SYMLINK_ROOT/uninstall.err"
+  symlink_rc=$?
+  set -e
+  cat "$SYMLINK_ROOT/uninstall.txt" "$SYMLINK_ROOT/uninstall.err" >"$SYMLINK_ROOT/uninstall.all"
 
-if [ "$symlink_rc" -eq 0 ]; then
-  fail "uninstall exited 0 despite scripts/ symlink"
-fi
-if [ ! -f "$MANIFEST_SYMLINK" ] || ! cmp -s "$MANIFEST_SYMLINK" "$SYMLINK_ROOT/mf.before"; then
-  fail "manifest not byte-identical after symlink refusal"
-fi
-if [ ! -f "$SYMLINK_ROOT/moved-scripts/jobs/owned.sh" ]; then
-  fail "owned.sh was removed through the scripts/ symlink"
-fi
-# Refusal must mention symlink and state that uninstall was rejected / manifest preserved.
-# Live product may phrase the guard as either the path-traversal form or the
-# shorter "scripts/ es un symlink; …" form verified against this tree.
-if ! grep -Eq 'symlink' "$SYMLINK_ROOT/uninstall.all"; then
-  fail "missing symlink mention in refusal"
-  cat "$SYMLINK_ROOT/uninstall.all" >&2
-fi
-if ! grep -Fq 'desinstalación rechazada' "$SYMLINK_ROOT/uninstall.all" \
-  || ! grep -Eq 'manifiesto preserv' "$SYMLINK_ROOT/uninstall.all"; then
-  fail "missing desinstalación rechazada / manifiesto preservado"
-  cat "$SYMLINK_ROOT/uninstall.all" >&2
+  if [ "$symlink_rc" -eq 0 ]; then
+    fail "uninstall exited 0 despite scripts/ symlink"
+  fi
+  if [ ! -f "$MANIFEST_SYMLINK" ] || ! cmp -s "$MANIFEST_SYMLINK" "$SYMLINK_ROOT/mf.before"; then
+    fail "manifest not byte-identical after symlink refusal"
+  fi
+  if [ ! -f "$SYMLINK_ROOT/moved-scripts/jobs/owned.sh" ]; then
+    fail "owned.sh was removed through the scripts/ symlink"
+  fi
+  # Refusal must mention symlink and state that uninstall was rejected / manifest preserved.
+  # Live product may phrase the guard as either the path-traversal form or the
+  # shorter "scripts/ es un symlink; …" form verified against this tree.
+  if ! grep -Eq 'symlink' "$SYMLINK_ROOT/uninstall.all"; then
+    fail "missing symlink mention in refusal"
+    cat "$SYMLINK_ROOT/uninstall.all" >&2
+  fi
+  if ! grep -Fq 'desinstalación rechazada' "$SYMLINK_ROOT/uninstall.all" \
+    || ! grep -Eq 'manifiesto preserv' "$SYMLINK_ROOT/uninstall.all"; then
+    fail "missing desinstalación rechazada / manifiesto preservado"
+    cat "$SYMLINK_ROOT/uninstall.all" >&2
+  fi
 fi
 
 if [ "$failures" -ne 0 ]; then

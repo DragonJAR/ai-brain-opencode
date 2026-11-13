@@ -7,6 +7,58 @@ ai_brain_test_root() {
   mktemp -d "${TMPDIR:-/tmp}/ai-brain-$1.XXXXXX"
 }
 
+# Git for Windows: `ln -s` silently copies the target (and fails when it does not
+# exist) unless MSYS asks for native symlinks. A test that builds a symlink would
+# then exercise a copy. Ask for native symlinks; where the account cannot create
+# them, `ln -s` now fails loudly instead of lying.
+case "${OSTYPE:-}" in
+  msys*|cygwin*)
+    case " ${MSYS:-} " in
+      *winsymlinks:*) ;;
+      *) MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict"; export MSYS ;;
+    esac
+    ;;
+esac
+
+# ai_brain_symlinks_supported: 0 when `ln -s` creates real symlinks here (probed once).
+ai_brain_symlinks_supported() {
+  if [ -z "${AI_BRAIN_SYMLINKS:-}" ]; then
+    local probe
+    probe="$(mktemp -d "${TMPDIR:-/tmp}/ai-brain-symlink-probe.XXXXXX")"
+    : > "$probe/target"
+    if ln -s target "$probe/link" 2>/dev/null && [ -L "$probe/link" ]; then
+      AI_BRAIN_SYMLINKS=1
+    else
+      AI_BRAIN_SYMLINKS=0
+    fi
+    rm -rf "$probe"
+    export AI_BRAIN_SYMLINKS
+  fi
+  [ "$AI_BRAIN_SYMLINKS" = 1 ]
+}
+
+# ai_brain_need_symlinks <what>: returns 0 when symlinks work; otherwise prints a
+# SKIP line naming the check that does not run, and returns 1.
+ai_brain_need_symlinks() {
+  ai_brain_symlinks_supported && return 0
+  printf 'SKIP: %s (este equipo no crea symlinks reales; en Windows hace falta el Modo de desarrollador)\n' "$1"
+  return 1
+}
+
+# ai_brain_link_or_copy <target> <path>: a symlink where they exist, else a copy.
+# For fixtures that only need "a path the package does not own" to be there.
+ai_brain_link_or_copy() {
+  if ai_brain_symlinks_supported; then ln -s "$1" "$2"; else cp "$1" "$2"; fi
+}
+
+# ai_brain_shim <bin-dir> <name> <program>: a tiny script that runs <program>.
+# Portable stand-in for `ln -s <program> <bin>/<name>`: on Windows a link to an
+# .exe without the extension is not runnable.
+ai_brain_shim() {
+  printf '#!/bin/sh\nexec "%s" "$@"\n' "$3" > "$1/$2"
+  chmod +x "$1/$2"
+}
+
 # A scheduled job needs the vault-side libraries install.sh copies next to it.
 # Usage: ai_brain_install_vault_libs <package-root> <vault>
 ai_brain_install_vault_libs() {

@@ -63,23 +63,25 @@ if ! MOCK_VAULT="$E" MOCK_GIT_CLEAN=1 /bin/bash "$COPY/install.sh" "$E" > "$TMP_
   fail "install without job templates failed on /bin/bash: $(grep -m1 -E 'unbound|✗' "$TMP_ROOT/nojobs.txt")"
 fi
 
-# 4. A symlinked brain-config.json or a dangling AGENTS.md link is refused before any change.
-printf '{"language":"en"}\n' > "$TMP_ROOT/cfg.json"
-S="$TMP_ROOT/vault-symlink-config"
-mkdir -p "$S/⚙️ Meta"
-printf '{"outside": true}\n' > "$TMP_ROOT/outside.json"
-ln -s "$TMP_ROOT/outside.json" "$S/⚙️ Meta/brain-config.json"
-if install_vault "$S" --config "$TMP_ROOT/cfg.json"; then
-  fail "install wrote through a symlinked brain-config.json"
+if ai_brain_need_symlinks "install rechaza brain-config.json y AGENTS.md como symlink"; then
+  # 4. A symlinked brain-config.json or a dangling AGENTS.md link is refused before any change.
+  printf '{"language":"en"}\n' > "$TMP_ROOT/cfg.json"
+  S="$TMP_ROOT/vault-symlink-config"
+  mkdir -p "$S/⚙️ Meta"
+  printf '{"outside": true}\n' > "$TMP_ROOT/outside.json"
+  ln -s "$TMP_ROOT/outside.json" "$S/⚙️ Meta/brain-config.json"
+  if install_vault "$S" --config "$TMP_ROOT/cfg.json"; then
+    fail "install wrote through a symlinked brain-config.json"
+  fi
+  grep -Fq '"outside": true' "$TMP_ROOT/outside.json" || fail "install overwrote the symlink target of brain-config.json"
+  grep -Fq 'symlink' "$TMP_ROOT/install-vault-symlink-config.txt" || fail "the symlinked brain-config.json refusal was not explained"
+  [ ! -e "$S/.opencode" ] || fail "install changed the vault before refusing the symlinked brain-config.json"
+  A="$TMP_ROOT/vault-dangling-agents"
+  mkdir -p "$A"
+  ln -s "$TMP_ROOT/agents-outside.md" "$A/AGENTS.md"
+  install_vault "$A" && fail "install accepted a dangling AGENTS.md symlink"
+  [ ! -e "$TMP_ROOT/agents-outside.md" ] || fail "install wrote AGENTS.md through a dangling symlink"
 fi
-grep -Fq '"outside": true' "$TMP_ROOT/outside.json" || fail "install overwrote the symlink target of brain-config.json"
-grep -Fq 'symlink' "$TMP_ROOT/install-vault-symlink-config.txt" || fail "the symlinked brain-config.json refusal was not explained"
-[ ! -e "$S/.opencode" ] || fail "install changed the vault before refusing the symlinked brain-config.json"
-A="$TMP_ROOT/vault-dangling-agents"
-mkdir -p "$A"
-ln -s "$TMP_ROOT/agents-outside.md" "$A/AGENTS.md"
-install_vault "$A" && fail "install accepted a dangling AGENTS.md symlink"
-[ ! -e "$TMP_ROOT/agents-outside.md" ] || fail "install wrote AGENTS.md through a dangling symlink"
 
 # 5. verify.sh: package commands do not stand in for the vendor wiring.
 rm "$V/.opencode/commands/brain-journal.md"

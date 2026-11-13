@@ -33,7 +33,6 @@ SH
 chmod +x "$BIN/launchctl"
 export PATH="$BIN:$PATH"
 export TMPDIR="$TMP_ROOT"
-export BRAIN_STARTER_UPDATE=0
 unset BRAIN_STARTER_PIN || true
 JOBS=""
 for job in "$PKG"/templates/jobs/*.sh; do JOBS="$JOBS $(basename "$job" .sh)"; done

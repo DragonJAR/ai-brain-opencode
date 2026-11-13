@@ -128,7 +128,6 @@ ai_brain_mock_opencode "$TMP_ROOT/bin"
 
 export MOCK_UNAME MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES MOCK_GIT_CALLS
 export PATH="$TMP_ROOT/bin:$PATH"
-export BRAIN_STARTER_UPDATE=0
 unset BRAIN_STARTER_PIN || true
 
 if ! MOCK_VAULT="$VAULT" "$BASH_BIN" "$PKG/install.sh" "$VAULT" > "$TMP_ROOT/install.txt" 2>&1; then

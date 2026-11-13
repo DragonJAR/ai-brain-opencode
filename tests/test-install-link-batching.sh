@@ -50,7 +50,6 @@ PYWRAP
   export MOCK_GIT_STARTER_SKILLS
   export PATH="$bin:/usr/bin:/bin"
   export TMPDIR="$root"
-  export BRAIN_STARTER_UPDATE=0
   unset BRAIN_STARTER_PIN || true
 
   if ! bash "$PKG/install.sh" "$vault" >"$root/install.txt" 2>&1; then

@@ -86,7 +86,7 @@ MOCK_CRONTAB_CALLS="$TMP_ROOT/crontab-calls.log"
 MOCK_CRONTAB_WRITES="$TMP_ROOT/crontab-writes.log"
 : > "$MOCK_CRONTAB_STATE"; : > "$MOCK_CRONTAB_CALLS"; : > "$MOCK_CRONTAB_WRITES"
 export MOCK_UNAME MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES
-export PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT" BRAIN_STARTER_UPDATE=0
+export PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT"
 unset BRAIN_STARTER_PIN || true
 
 # 5. Missing or invalid manifest: non-zero exit, nothing removed, no "Listo".

@@ -39,7 +39,6 @@ ai_brain_mock_windows "$BIN"
 export MOCK_UNAME MOCK_VAULT MOCK_GIT_CALLS MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES
 export PATH="$BIN:$PATH"
 export TMPDIR="$TMP_ROOT"
-export BRAIN_STARTER_UPDATE=0
 unset BRAIN_STARTER_PIN || true
 
 # 1. --dry-run validates and prints the plan without creating the vault.
@@ -268,6 +267,17 @@ purge_fixture "$TMP_ROOT/purge-dirty"
 printf 'local work\n' > "$TMP_ROOT/purge-dirty/.opencode/skills/humanizer/notes.md"
 bash "$PKG/uninstall.sh" "$TMP_ROOT/purge-dirty" --purge-clones > "$TMP_ROOT/purge-dirty.txt" 2>&1 || true
 [ -f "$TMP_ROOT/purge-dirty/.opencode/skills/humanizer/notes.md" ] || fail "--purge-clones deleted a clone with local changes"
+# A clean tree is not enough: commits the remote does not have (on a branch or on
+# a detached HEAD) would be lost too.
+purge_fixture "$TMP_ROOT/purge-ahead"
+real_git -C "$TMP_ROOT/purge-ahead/.opencode/skills/humanizer" commit -q --allow-empty -m local
+purge_fixture "$TMP_ROOT/purge-detached"
+real_git -C "$TMP_ROOT/purge-detached/.opencode/skills/humanizer" checkout -q --detach
+real_git -C "$TMP_ROOT/purge-detached/.opencode/skills/humanizer" commit -q --allow-empty -m local
+for case_dir in purge-ahead purge-detached; do
+  bash "$PKG/uninstall.sh" "$TMP_ROOT/$case_dir" --purge-clones > "$TMP_ROOT/$case_dir.txt" 2>&1 || true
+  [ -d "$TMP_ROOT/$case_dir/.opencode/skills/humanizer/.git" ] || fail "--purge-clones deleted a clone with unpushed commits ($case_dir)"
+done
 
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: audit regressions had %s failed assertions\n' "$failures" >&2

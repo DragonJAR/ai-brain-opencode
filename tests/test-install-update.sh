@@ -23,7 +23,7 @@ ai_brain_mock_platform "$BIN"
 ai_brain_mock_git "$BIN"
 ai_brain_mock_opencode "$BIN"
 export MOCK_UNAME=Linux MOCK_GIT_REAL="$REAL_GIT" MOCK_GIT_PULL_RC=0 MOCK_GIT_CALLS="$TMP_ROOT/git-calls.log"
-export PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT" HOME="$TMP_ROOT/userhome" BRAIN_STARTER_UPDATE=0
+export PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT" HOME="$TMP_ROOT/userhome"
 export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=Test GIT_COMMITTER_NAME=Test
 GIT_AUTHOR_EMAIL="test@$(printf 'example.invalid')"
 GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"

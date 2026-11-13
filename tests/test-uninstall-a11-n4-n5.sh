@@ -38,7 +38,6 @@ setup_install_env() {
   export MOCK_UNAME MOCK_GIT_CALLS MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES MOCK_VAULT
   export PATH="$root/bin:$PATH"
   export TMPDIR="$root"
-  export BRAIN_STARTER_UPDATE=0
   unset BRAIN_STARTER_PIN || true
 }
 

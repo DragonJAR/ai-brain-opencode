@@ -39,7 +39,6 @@ ai_brain_mock_opencode "$BIN"
 export MOCK_UNAME MOCK_VAULT MOCK_GIT_CALLS MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES
 export PATH="$BIN:/usr/bin:/bin"
 export TMPDIR="$TMP_ROOT"
-export BRAIN_STARTER_UPDATE=0
 unset BRAIN_STARTER_PIN || true
 
 # 1. --config seeds the vault config verbatim; --yes is accepted.

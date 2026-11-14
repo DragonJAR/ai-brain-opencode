@@ -112,7 +112,7 @@ starter's own installer skill is hidden with a permission rule in the vault's `o
 
 | Key | Meaning |
 |---|---|
-| `language`, `timezone`, `habits`, `extra_rules` | Context the plugin adds each turn (`extra_rules`: your own standing rules) |
+| `language`, `timezone`, `habits`, `accountability`, `extra_rules` | Context the plugin adds each turn (`extra_rules`: your own standing rules) |
 | `journal.time`, `schedule.*` | Job times, `HH:MM`, on the host clock |
 | `snapshot_paths` | Vault-relative paths the daily snapshot commits; add `👤 CRM` or `📝 Notes` to include them |
 

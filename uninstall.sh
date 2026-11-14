@@ -3,6 +3,7 @@
 #   bash uninstall.sh <ruta-del-vault> [--purge-clones] [--dry-run]
 #   --purge-clones  además borra los clones vendorizados (ai-brain-starter, humanizer)
 #                   cuando siguen apuntando a su origen y no tienen cambios locales
+#                   ni commits sin publicar
 #   --dry-run       muestra lo que se eliminaría sin tocar nada
 #   -h, --help      muestra esta ayuda
 set -euo pipefail

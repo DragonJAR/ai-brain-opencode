@@ -113,7 +113,7 @@ skill instalador del propio starter queda oculto con una regla de permisos en el
 
 | Clave | Significado |
 |---|---|
-| `language`, `timezone`, `habits`, `extra_rules` | Contexto que el plugin agrega en cada turno (`extra_rules`: tus reglas permanentes) |
+| `language`, `timezone`, `habits`, `accountability`, `extra_rules` | Contexto que el plugin agrega en cada turno (`extra_rules`: tus reglas permanentes) |
 | `journal.time`, `schedule.*` | Horas de los trabajos, `HH:MM`, en el reloj del equipo |
 | `snapshot_paths` | Rutas del vault que confirma el snapshot diario; agrega `👤 CRM` o `📝 Notes` para incluirlas |
 

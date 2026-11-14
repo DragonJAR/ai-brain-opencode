@@ -18,6 +18,20 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **`uninstall.sh --purge-clones` borraba trabajo sin publicar:** un clon con el árbol limpio se daba por intacto
   aunque tuviera commits propios (en una rama o con HEAD suelto). Ahora solo se borra si HEAD está en el commit
   fijado o en una rama remota y ninguna rama local va por delante del remoto.
+- **`install.sh --update <vault>`:** el re-cableado tras el `pull` se trataba como un `--wire` puro y nunca movía
+  el starter y humanizer a los commits que fija la versión nueva del paquete. Ahora lo hace.
+- **Tareas retiradas en Windows:** una tarea de `schtasks` que el paquete ya no programa quedaba activa y huérfana;
+  `schedule.sh` la borra como ya hacían launchd y cron. `schedule.sh` acepta `--dry-run --remove` en cualquier
+  orden, lee `crontab -l` con locale neutro y descarta el `\r` de las horas leídas en Git Bash.
+- **`snapshot_paths`:** una ruta con salto de línea, retorno de carro o byte nulo se descarta con aviso.
+- **`uninstall.sh`:** también se niega, sin tocar nada, si `scripts/lib`, `.opencode/commands` o `⚙️ Meta/scripts`
+  son symlinks.
+- **`/audit`:** resuelve `[[./Nota]]`, ignora los enlaces de solo ancla, da por vacío un `type:` `null`, `~` o
+  `None` (sin importar mayúsculas), acepta el cierre `...` del frontmatter y no confunde un separador `----`.
+- **Plugin `brain-vault`:** el contexto incluye tus `accountability`; reconoce más despedidas (`chau`, `hasta
+  luego`, `see you tomorrow`…) y no dispara el flujo de reunión con una pregunta (`¿cuándo terminó la reunión?`);
+  los hooks de contexto y de prompt se degradan por separado; las notas nuevas creadas con `patch` y ruta entre
+  comillas también reciben frontmatter, sin cambiar sus finales de línea.
 - **Desinstalación en Windows:** `shutil.rmtree` se detenía en los objetos de git, que Windows marca de solo
   lectura, y `--purge-clones` fallaba. `ownership.rmtree` quita esa marca y reintenta; lo usan la desinstalación y
   `wire.py`.
@@ -136,6 +150,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   re-cablea como `--wire`. El trabajo semanal `update-brain` solo mantiene el starter y humanizer en los commits
   que fija el paquete. El
   control de datos personales trata esa URL (y la forma SSH `git@host:`) como atribución publicada.
+- `tests/run.sh` corre todos los tests aunque uno falle, nombra los que fallaron y repite cada uno con `bash -x`
+  para que el log del CI muestre la causa. Los tests ya no dependen del equipo: comparten una identidad git de
+  prueba, simulan OpenCode y, en Windows, quitan el `\r` que Python agrega a sus salidas.
 - `tests/run.sh` descubre también `tests/test-*.mjs`; regresiones para la salida UTF-8 de `/audit`, el bus de
   `notify-send`, la limpieza de `AGENTS.md` y el aviso falso de symlink al reinstalar.
 - **Comandos del starter en OpenCode:** se enlazaban tal cual y pedían usar "the Skill tool" (de Claude Code) y

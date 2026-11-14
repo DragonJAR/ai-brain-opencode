@@ -127,6 +127,9 @@ ai_brain_mock_git "$TMP_ROOT/bin"
 ai_brain_mock_opencode "$TMP_ROOT/bin"
 
 export MOCK_UNAME MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES MOCK_GIT_CALLS
+# Host tools are resolved against this PATH. The fixture bins below must not
+# shadow python3: `command -v` would then print a function or the shim name.
+HOST_PATH="$PATH"
 export PATH="$TMP_ROOT/bin:$PATH"
 unset BRAIN_STARTER_PIN || true
 
@@ -358,12 +361,22 @@ MISSING_VAULT="$TMP_ROOT/no-opencode-vault"
 mkdir -p "$NO_OPENCODE_BIN" "$MISSING_VAULT"
 printf 'existing user data\n' > "$MISSING_VAULT/keep.txt"
 for command_name in dirname mkdir basename tr sed python3 node find wc ln readlink cp chmod ls cat grep date head tail rm cut sort; do
-  if resolved="$(command -v "$command_name")"; then
-    ai_brain_shim "$NO_OPENCODE_BIN" "$command_name" "$resolved"
-  fi
+  resolved="$(PATH="$HOST_PATH" command -v "$command_name" 2>/dev/null)" || true
+  case "$resolved" in
+    /*) ;;
+    *) resolved="$(PATH="$HOST_PATH" type -ap "$command_name" 2>/dev/null | head -1)" || true ;;
+  esac
+  case "$resolved" in
+    /*) ai_brain_shim "$NO_OPENCODE_BIN" "$command_name" "$resolved" ;;
+  esac
 done
 ai_brain_shim "$NO_OPENCODE_BIN" uname "$TMP_ROOT/bin/uname"
 ai_brain_shim "$NO_OPENCODE_BIN" git "$TMP_ROOT/bin/git"
+# An unqualified exec ("python3") re-enters this directory and never returns.
+if grep -R -E -l 'exec "[^/]' "$NO_OPENCODE_BIN" > "$TMP_ROOT/bad-shims.txt"; then
+  fail "no-opencode-bin shim execs an unqualified command"
+  cat "$TMP_ROOT/bad-shims.txt" >&2
+fi
 find "$MISSING_VAULT" -mindepth 1 -print | sort > "$TMP_ROOT/no-opencode-before.txt"
 if PATH="$NO_OPENCODE_BIN" MOCK_VAULT="$MISSING_VAULT" "$BASH_BIN" "$PKG/install.sh" "$MISSING_VAULT" > "$TMP_ROOT/no-opencode.txt" 2>&1; then
   fail "installer succeeded without the required OpenCode CLI"

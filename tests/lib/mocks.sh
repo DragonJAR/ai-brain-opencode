@@ -65,9 +65,35 @@ ai_brain_link_or_copy() {
 # ai_brain_shim <bin-dir> <name> <program>: a tiny script that runs <program>.
 # Portable stand-in for `ln -s <program> <bin>/<name>`: on Windows a link to an
 # .exe without the extension is not runnable.
+# The exec target is always absolute. A bare name such as python3 (what
+# `command -v` prints for a function) re-executes the shim forever once PATH
+# contains only this directory.
 ai_brain_shim() {
-  printf '#!/bin/sh\nexec "%s" "$@"\n' "$3" > "$1/$2"
-  chmod +x "$1/$2"
+  local bin="$1" name="$2" program="$3" resolved="" dest=""
+  case "$program" in
+    /*) resolved="$program" ;;
+    *)
+      resolved="$(command -v "$program" 2>/dev/null || true)"
+      case "$resolved" in
+        /*) ;;
+        *) resolved="$(type -P "$program" 2>/dev/null || true)" ;;
+      esac
+      ;;
+  esac
+  case "$resolved" in
+    /*) ;;
+    *)
+      printf 'ai_brain_shim: %s: objetivo no absoluto (%s)\n' "$name" "$program" >&2
+      return 1
+      ;;
+  esac
+  dest="$(cd "$bin" && pwd)/$name"
+  if [ "$resolved" = "$dest" ]; then
+    printf 'ai_brain_shim: %s se ejecutaría a sí mismo (%s)\n' "$name" "$resolved" >&2
+    return 1
+  fi
+  printf '#!/bin/sh\nexec "%s" "$@"\n' "$resolved" > "$dest"
+  chmod +x "$dest"
 }
 
 # A scheduled job needs the vault-side libraries install.sh copies next to it.

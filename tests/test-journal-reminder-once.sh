@@ -25,7 +25,7 @@ cat > "$CFG" <<JSON
 }
 JSON
 
-REAL_PY="$(command -v python3)"
+REAL_PY="$(type -P python3)"
 CFG_OPENS="$TMP_ROOT/cfg-opens.log"
 : > "$CFG_OPENS"
 cat > "$TMP_ROOT/bin/python3" <<SH

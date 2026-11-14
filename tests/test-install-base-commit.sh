@@ -30,8 +30,6 @@ export MOCK_UNAME MOCK_GIT_REAL
 export PATH="$BIN:/usr/bin:/bin"
 export TMPDIR="$TMP_ROOT" HOME="$TMP_ROOT/userhome" XDG_CONFIG_HOME="$TMP_ROOT/userhome/.config"
 export GIT_CONFIG_NOSYSTEM=1
-export GIT_AUTHOR_NAME=Test GIT_AUTHOR_EMAIL=test@example.invalid
-export GIT_COMMITTER_NAME=Test GIT_COMMITTER_EMAIL=test@example.invalid
 unset BRAIN_STARTER_PIN || true
 mkdir -p "$HOME"
 

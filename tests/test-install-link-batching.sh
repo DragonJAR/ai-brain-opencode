@@ -34,7 +34,7 @@ count_record_links_for_n() {
   ai_brain_mock_git "$bin"
   ai_brain_mock_opencode "$bin"
 
-  real_py="$(command -v python3)"
+  real_py="$(type -P python3)"
   cat > "$bin/python3" <<PYWRAP
 #!/bin/sh
 for arg in "\$@"; do

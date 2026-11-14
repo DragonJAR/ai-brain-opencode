@@ -7,6 +7,12 @@ ai_brain_test_root() {
   mktemp -d "${TMPDIR:-/tmp}/ai-brain-$1.XXXXXX"
 }
 
+# A CI runner has no git identity and no OpenCode: a test must never depend on the
+# host. Every test commits as this identity (tests of a missing identity use
+# MOCK_GIT_IDENTITY=missing in the git mock) and installs with ai_brain_mock_opencode.
+export GIT_AUTHOR_NAME=Test GIT_AUTHOR_EMAIL=test@example.invalid
+export GIT_COMMITTER_NAME=Test GIT_COMMITTER_EMAIL=test@example.invalid
+
 # Git for Windows: `ln -s` silently copies the target (and fails when it does not
 # exist) unless MSYS asks for native symlinks. A test that builds a symlink would
 # then exercise a copy. Ask for native symlinks; where the account cannot create
@@ -17,6 +23,11 @@ case "${OSTYPE:-}" in
       *winsymlinks:*) ;;
       *) MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict"; export MSYS ;;
     esac
+    # Python on Windows ends printed lines with CRLF: `read` and `$(...)` would keep
+    # the \r and every comparison would fail. The package strips it where it reads
+    # Python (vendor_lock, run_python callers); a test's direct calls go through here.
+    # Exit status survives: every test runs with `set -o pipefail`.
+    python3() { command python3 "$@" | tr -d '\r'; }
     ;;
 esac
 

@@ -45,7 +45,7 @@ cat > "$BIN/python3" <<'STUB'
 printf 'simulated broken python3\n' >&2
 exit 1
 STUB
-real_py="$(command -v python3)"
+real_py="$(type -P python3)"
 cat > "$BIN/py" <<PYWRAP
 #!/bin/sh
 [ "\${1:-}" = "-3" ] && shift

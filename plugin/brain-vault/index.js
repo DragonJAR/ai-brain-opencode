@@ -76,10 +76,11 @@ function readConfig(vaultDir) {
   }
 
   let timezone = DEFAULTS.timezone
-  if (typeof raw.timezone === "string" && raw.timezone) {
+  if (typeof raw.timezone === "string" && raw.timezone.trim()) {
+    const tz = raw.timezone.trim()
     try {
-      new Intl.DateTimeFormat("en-CA", { timeZone: raw.timezone }).format(new Date())
-      timezone = raw.timezone
+      new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date())
+      timezone = tz
     } catch {
       issues.push(`timezone inválida '${raw.timezone}'`)
     }
@@ -88,15 +89,23 @@ function readConfig(vaultDir) {
   const journal = isObject(raw.journal) ? raw.journal : {}
   let journalTime = DEFAULTS.journal.time
   if (journal.time !== undefined) {
-    const val = String(journal.time ?? "")
+    const val = String(journal.time ?? "").trim()
     if (TIME_PATTERN.test(val)) {
-      journalTime = journal.time
+      journalTime = val
     } else {
       issues.push(`journal.time inválida '${journal.time}'`)
     }
   }
 
   const schedule = isObject(raw.schedule) ? raw.schedule : {}
+  for (const key of ["insights_time", "maintenance_time", "update_time"]) {
+    if (schedule[key] !== undefined) {
+      const val = String(schedule[key] ?? "").trim()
+      if (!TIME_PATTERN.test(val)) {
+        issues.push(`schedule.${key} inválida '${schedule[key]}'`)
+      }
+    }
+  }
 
   if (issues.length > 0) {
     console.warn(`[brain-vault] Advertencia en ⚙️ Meta/brain-config.json (${issues.join(", ")}); usando valores por defecto`)
@@ -105,7 +114,7 @@ function readConfig(vaultDir) {
   // Allowlist, never a blind spread: unknown or malformed keys cannot leak
   // into consumers of this config.
   return {
-    vault_name: typeof raw.vault_name === "string" && raw.vault_name.trim() ? raw.vault_name : DEFAULTS.vault_name,
+    vault_name: typeof raw.vault_name === "string" && raw.vault_name.trim() ? raw.vault_name.trim() : DEFAULTS.vault_name,
     language: raw.language === "en" ? "en" : "es",
     timezone,
     journal: {
@@ -115,9 +124,9 @@ function readConfig(vaultDir) {
       gratitude: journal.gratitude === false ? false : DEFAULTS.journal.gratitude,
     },
     schedule: {
-      insights_time: TIME_PATTERN.test(String(schedule.insights_time ?? "")) ? schedule.insights_time : DEFAULTS.schedule.insights_time,
-      maintenance_time: TIME_PATTERN.test(String(schedule.maintenance_time ?? "")) ? schedule.maintenance_time : DEFAULTS.schedule.maintenance_time,
-      update_time: TIME_PATTERN.test(String(schedule.update_time ?? "")) ? schedule.update_time : DEFAULTS.schedule.update_time,
+      insights_time: TIME_PATTERN.test(String(schedule.insights_time ?? "").trim()) ? String(schedule.insights_time).trim() : DEFAULTS.schedule.insights_time,
+      maintenance_time: TIME_PATTERN.test(String(schedule.maintenance_time ?? "").trim()) ? String(schedule.maintenance_time).trim() : DEFAULTS.schedule.maintenance_time,
+      update_time: TIME_PATTERN.test(String(schedule.update_time ?? "").trim()) ? String(schedule.update_time).trim() : DEFAULTS.schedule.update_time,
     },
     habits: stringList(raw.habits),
     accountability: stringList(raw.accountability),
@@ -127,12 +136,13 @@ function readConfig(vaultDir) {
 
 // Vault-relative path, POSIX separators, or "" when the file is outside the vault.
 function vaultRelative(vaultDir, filePath) {
-  if (!filePath) return ""
-  const root = resolve(vaultDir)
-  const absolute = isAbsolute(filePath) ? resolve(filePath) : resolve(root, filePath)
+  if (!vaultDir || !filePath || typeof filePath !== "string" || !filePath.trim() || filePath.includes("\0")) return ""
+  const root = resolve(String(vaultDir).normalize("NFC"))
+  const normPath = filePath.trim().normalize("NFC")
+  const absolute = isAbsolute(normPath) ? resolve(normPath) : resolve(root, normPath)
   const rel = relative(root, absolute)
-  if (!rel || rel.startsWith("..") || isAbsolute(rel)) return ""
-  return rel.split(/[\\/]+/).join("/")
+  if (!rel || rel === ".." || rel.startsWith("../") || rel.startsWith("..\\") || isAbsolute(rel)) return ""
+  return rel.replace(/[\\/]+$/, "").split(/[\\/]+/).filter(Boolean).join("/")
 }
 
 const stripVS16 = (str) => String(str ?? "").replace(/\uFE0F/g, "")
@@ -161,7 +171,7 @@ function noteType(relPath) {
 }
 
 // Real frontmatter, not a markdown thematic break that merely starts with "---".
-const FRONTMATTER_PATTERN = /^---\r?\n[\s\S]*?\r?\n---/
+const FRONTMATTER_PATTERN = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/
 
 export default {
   id: "brain-vault",
@@ -204,8 +214,8 @@ export default {
     // Longest-first: "eso es todo por hoy" antes que "eso es todo".
     const closeWords =
       cfg.language === "es"
-        ? /(?<![\p{L}\p{N}])(?:chao|adi[oó]s|buenas noches|hasta ma[nñ]ana|nos vemos|eso es todo por hoy|gracias eso es todo|eso es todo|terminamos por hoy|cerramos por hoy|me voy)$/iu
-        : /(?<![\p{L}\p{N}])(?:bye|good\s?night|see you|that['’]?s all|that is all|wrap up|we['’]?re done|we are done)$/iu
+        ? /(?<![\p{L}\p{N}])(?:chao|chau|adi[oó]s|buenas noches|hasta ma[nñ]ana|hasta luego|hasta pronto|nos vemos(?: ma[nñ]ana)?|eso es todo por hoy|gracias eso es todo|eso es todo|terminamos por hoy|cerramos por hoy|me voy)$/iu
+        : /(?<![\p{L}\p{N}])(?:bye|good\s?night|see you(?: tomorrow)?|that['’]?s all(?: for today)?|that is all(?: for today)?|wrap up(?: for today)?|we['’]?re done(?: for today)?|we are done(?: for today)?)$/iu
     // Trailing punctuation, ellipsis and emoji (with skin tones, ZWJ sequences and VS16).
     const closeTail = /[\s.,;:!?¡¿…~\-–—\p{Extended_Pictographic}\p{Emoji_Modifier}\u200D\uFE0F]+$/u
     const CLOSE_MAX_LENGTH = 400
@@ -213,14 +223,20 @@ export default {
       const trimmed = text.trim()
       const tail = (trimmed.match(closeTail) || [""])[0]
       const core = trimmed.slice(0, trimmed.length - tail.length)
-      const lastSentence = core.split(/[.!?…]\s+/).pop()
+      const lastSentence = core.split(/[.!?…\n]+\s*/).pop()
       if (tail.includes("?") || lastSentence.includes("¿")) return false
       return closeWords.test(core)
     }
     const meetingWords =
       cfg.language === "es"
-        ? /\b(acabo de tener una (reuni[oó]n|llamada|junta)|tuve una (reuni[oó]n|llamada)|termin[oó] la (reuni[oó]n|llamada)|reuni[oó]n terminada)\b/i
-        : /\b(just had a (meeting|call)|meeting (is )?(done|just ended))\b/i
+        ? /\b(acabo de tener una (?:reuni[oó]n|llamada|junta)|tuve una (?:reuni[oó]n|llamada|junta)|termin[oó] la (?:reuni[oó]n|llamada|junta)|(?:reuni[oó]n|llamada|junta) terminada)\b/i
+        : /\b(just had a (?:meeting|call)|(?:meeting|call) (?:is )?(?:done|just ended)|(?:meeting|call) (?:ended|finished))\b/i
+    const isMeetingQuestion = (text) => {
+      const trimmed = text.trim()
+      if (/^\s*¿[^.!?…]*\?\s*$/.test(trimmed)) return true
+      if (/^\s*(?:cu[aá]ndo|d[oó]nde|c[oó]mo|por qu[eé]|qui[eé]n|did|is|was|when|where|why|how)\b[^.!?…]*\?\s*$/i.test(trimmed)) return true
+      return false
+    }
 
     const isEn = cfg.language === "en"
 
@@ -233,7 +249,7 @@ export default {
           "- Never invent technical data (CVEs, versions, IPs, tool outputs): use MISSING / [PENDING_DATA].",
           "- Respond in the vault language (en) with an actionable-first, no-filler criterion.",
           "- The starter skills were written for Claude Code: read CLAUDE.md as AGENTS.md and their skill paths as .opencode/skills/; this plugin replaces their hooks, so never install or report them as missing.",
-          "- Journal: " + cfg.journal.time + " (" + cfg.timezone + "); tracked habits: " + (cfg.habits.join(", ") || "none") + ".",
+          "- Journal: " + cfg.journal.time + " (" + cfg.timezone + "); tracked habits: " + (cfg.habits.join(", ") || "none") + (cfg.accountability.length > 0 ? "; accountability: " + cfg.accountability.join(", ") : "") + ".",
           ...cfg.extra_rules.map((rule) => "- " + rule),
         ].join("\n")
       : [
@@ -244,7 +260,7 @@ export default {
           "- Nunca inventes datos técnicos (CVE, versiones, IPs, salidas de herramientas): usa MISSING / [PENDING_DATA].",
           "- Responde en el idioma del vault (" + cfg.language + ") y con criterio de no-despedida: lo accionable primero, sin relleno.",
           "- Los skills del starter se escribieron para Claude Code: lee CLAUDE.md como AGENTS.md y sus rutas de skills como .opencode/skills/; este plugin reemplaza sus hooks, así que nunca los instales ni los reportes como faltantes.",
-          "- Diario: " + cfg.journal.time + " (" + cfg.timezone + "); hábitos trackeados: " + (cfg.habits.join(", ") || "ninguno") + ".",
+          "- Diario: " + cfg.journal.time + " (" + cfg.timezone + "); hábitos trackeados: " + (cfg.habits.join(", ") || "ninguno") + (cfg.accountability.length > 0 ? "; accountability: " + cfg.accountability.join(", ") : "") + ".",
           ...cfg.extra_rules.map((rule) => "- " + rule),
         ].join("\n")
 
@@ -266,18 +282,22 @@ export default {
         await sessionHook("context", (event) => {
           if (Array.isArray(event?.system)) event.system.push({ type: "text", text: rules })
         })
+      } catch (err) {
+        console.warn("[brain-vault] ctx.session.hook('context') rechazó el registro; contexto inactivo: " + (err instanceof Error ? err.message : String(err)))
+      }
 
+      try {
         await sessionHook("prompt", (event) => {
           const text = String(event?.prompt?.text ?? "").normalize("NFC")
           if (!text) return
-          if (meetingWords.test(text)) {
+          if (meetingWords.test(text) && !isMeetingQuestion(text)) {
             event.prompt.text = text + meetingNote
           } else if (text.length <= CLOSE_MAX_LENGTH && isClose(text)) {
             event.prompt.text = text + closeNote
           }
         })
       } catch (err) {
-        console.warn("[brain-vault] ctx.session.hook rechazó el registro; contexto y cierre inactivos: " + (err instanceof Error ? err.message : String(err)))
+        console.warn("[brain-vault] ctx.session.hook('prompt') rechazó el registro; cierre y reunión inactivos: " + (err instanceof Error ? err.message : String(err)))
       }
     } else {
       console.warn("[brain-vault] ctx.session.hook no está disponible; contexto y cierre inactivos")
@@ -302,19 +322,21 @@ export default {
 
     // patch/apply_patch create files only through "*** Add File: <path>" sections of "+" lines.
     const addFrontmatterToPatch = (patchText) => {
-      const lines = patchText.split("\n")
+      const newline = patchText.includes("\r\n") ? "\r\n" : "\n"
+      const lines = patchText.split(/\r?\n/)
       const out = []
       for (let i = 0; i < lines.length; i++) {
         out.push(lines[i])
-        const header = /^\*\*\* Add File:\s*(.+?)\s*$/.exec(lines[i].replace(/\r$/, ""))
+        const header = /^\*\*\* Add File:\s*(.+?)\s*$/.exec(lines[i])
         if (!header) continue
         let end = i + 1
         while (end < lines.length && lines[end].startsWith("+")) end++
-        const body = lines.slice(i + 1, end).map((line) => line.slice(1).replace(/\r$/, "")).join("\n")
-        const frontmatter = newNoteFrontmatter(header[1], body)
-        if (frontmatter) out.push(...frontmatter.replace(/\n$/, "").split("\n").map((line) => "+" + line))
+        const body = lines.slice(i + 1, end).map((line) => line.slice(1)).join(newline)
+        const rawFile = header[1].replace(/^["']|["']$/g, "")
+        const frontmatter = newNoteFrontmatter(rawFile, body)
+        if (frontmatter) out.push(...frontmatter.replace(/\r?\n$/, "").split(/\r?\n/).map((line) => "+" + line))
       }
-      return out.join("\n")
+      return out.join(newline)
     }
 
     try {
@@ -331,8 +353,20 @@ export default {
         }
         if (!tool.includes("write")) return
         const path = String(input.filePath ?? input.file_path ?? input.path ?? input.file ?? "")
-        const frontmatter = newNoteFrontmatter(path, input.content)
-        if (frontmatter) event.input = { ...input, content: frontmatter + input.content }
+        const content = typeof input.content === "string" ? input.content
+          : typeof input.text === "string" ? input.text
+          : typeof input.contents === "string" ? input.contents
+          : ""
+        const frontmatter = newNoteFrontmatter(path, content)
+        if (frontmatter) {
+          if (typeof input.content === "string") {
+            event.input = { ...input, content: frontmatter + input.content }
+          } else if (typeof input.text === "string") {
+            event.input = { ...input, text: frontmatter + input.text }
+          } else if (typeof input.contents === "string") {
+            event.input = { ...input, contents: frontmatter + input.contents }
+          }
+        }
       })
     } catch (err) {
       console.warn("[brain-vault] ctx.tool.hook rechazó el registro; frontmatter automático inactivo: " + (err instanceof Error ? err.message : String(err)))

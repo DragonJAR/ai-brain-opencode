@@ -112,4 +112,14 @@ DBUS_SESSION_BUS_ADDRESS="unix:path=/custom/bus" MOCK_UNAME=Linux XDG_RUNTIME_DI
 [ "$(cat "$NOTIFY_LOG")" = "unix:path=/custom/bus" ] \
   || { printf 'FAIL: journal-reminder overrode an existing DBUS_SESSION_BUS_ADDRESS\n' >&2; exit 1; }
 
+# Fallback on corrupt/empty config: must degrade safely and announce defaults.
+cat > "$CFG" <<JSON
+{}
+JSON
+OUT_FALLBACK="$(MOCK_UNAME=Darwin bash "$JOB" 2>>"$TMP_ROOT/err.txt")"
+case "$OUT_FALLBACK" in
+  *"mi-cerebro: Hora del diario (20:30)"*) ;;
+  *) printf 'FAIL: journal-reminder did not fall back to defaults on empty config (got: %s)\n' "$OUT_FALLBACK" >&2; exit 1 ;;
+esac
+
 printf 'PASS: journal-reminder reads config once; osascript gets name via argv; notify-send gets the session bus\n'

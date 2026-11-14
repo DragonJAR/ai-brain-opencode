@@ -55,6 +55,7 @@ try {
     timezone: "Etc/UTC",
     journal: { time: "21:15" },
     habits: ["agua", "caminar"],
+    accountability: ["métricas", "entregables"],
     extra_rules: ["Regla extra del operador"],
   })
   const hooks = await load(vault)
@@ -67,6 +68,7 @@ try {
   const rules = contextEvent.system.map((item) => item.text).join("\n")
   ok(rules.includes("21:15"), "las reglas incluyen la hora del diario configurada")
   ok(rules.includes("agua, caminar"), "las reglas incluyen los hábitos configurados")
+  ok(rules.includes("accountability: métricas, entregables"), "las reglas incluyen accountability configurada")
   ok(rules.includes("Regla extra del operador"), "las reglas incluyen extra_rules")
 
   const closing = { prompt: { text: "chao" } }
@@ -84,6 +86,22 @@ try {
   const meeting = { prompt: { text: "acabo de tener una reunión" } }
   hooks.prompt[0](meeting)
   ok(meeting.prompt.text.includes("Disparador de reunión detectado"), "el disparador de reunión inyecta el flujo")
+
+  const meetingJunta = { prompt: { text: "acabo de tener una junta con el equipo" } }
+  hooks.prompt[0](meetingJunta)
+  ok(meetingJunta.prompt.text.includes("Disparador de reunión detectado"), "junta dispara reunión")
+
+  const meetingLlamada = { prompt: { text: "llamada terminada con el cliente" } }
+  hooks.prompt[0](meetingLlamada)
+  ok(meetingLlamada.prompt.text.includes("Disparador de reunión detectado"), "llamada terminada dispara reunión")
+
+  const meetingQuestion1 = { prompt: { text: "¿Cuándo terminó la reunión?" } }
+  hooks.prompt[0](meetingQuestion1)
+  ok(!meetingQuestion1.prompt.text.includes("Disparador de reunión detectado"), "pregunta sobre reunión no dispara el flujo")
+
+  const meetingQuestion2 = { prompt: { text: "¿Tuve una reunión ayer?" } }
+  hooks.prompt[0](meetingQuestion2)
+  ok(!meetingQuestion2.prompt.text.includes("Disparador de reunión detectado"), "¿Tuve una reunión? es pregunta, no trigger")
 
   const plain = { prompt: { text: "arregla el bug del parser" } }
   hooks.prompt[0](plain)
@@ -129,6 +147,18 @@ try {
   const outside = { tool: "write", input: { filePath: join(root, "otro-lugar", "nota.md"), content: "# fuera" } }
   await hook(outside)
   ok(outside.input.content === "# fuera", "una ruta fuera del vault no recibe frontmatter")
+
+  const nullByte = { tool: "write", input: { filePath: join(vault, "📝 Notes", "bad\0.md"), content: "# bad" } }
+  await hook(nullByte)
+  ok(nullByte.input.content === "# bad", "ruta con byte nulo no lanza error y queda intacta")
+
+  const dotDotInName = { tool: "write", input: { filePath: join(vault, "📝 Notes", "..hidden.md"), content: "# hidden" } }
+  await hook(dotDotInName)
+  ok(dotDotInName.input.content.startsWith("---\ntype: note"), "archivo ..hidden.md dentro del vault recibe frontmatter")
+
+  const altProp = { tool: "write", input: { path: join(vault, "📝 Notes", "alt.md"), text: "# alt" } }
+  await hook(altProp)
+  ok(altProp.input.text.startsWith("---\ntype: note"), "input con propiedad 'text' y 'path' recibe frontmatter")
 
   const existing = { tool: "write", input: { filePath: join(vault, "📝 Notes", "ya.md"), content: "---\ntype: note\n---\n# ya" } }
   await hook(existing)
@@ -203,17 +233,25 @@ try {
   // 5. Close signals: questions are not farewells; ellipsis, emoji and curly apostrophes are.
   const closeCases = [
     [hooks, "chao…", true],
+    [hooks, "chau", true],
+    [hooks, "hasta luego", true],
+    [hooks, "nos vemos mañana", true],
     [hooks, "nos vemos 👋", true],
     [hooks, "buenas noches 🌙✨", true],
     [hooks, "¿ya terminamos por hoy?", false],
     [hooks, "¿eso es todo?", false],
+    [hooks, "¿nos vemos mañana?", false],
     [hooks, "eso es todo? 🤔", false],
     [hooks, "nachao", false],
   ]
   const enHooks = await load(makeVault("english", { language: "en" }))
   closeCases.push(
     [enHooks, "that’s all", true],
+    [enHooks, "that's all for today", true],
     [enHooks, "we’re done!", true],
+    [enHooks, "we're done for today", true],
+    [enHooks, "wrap up for today", true],
+    [enHooks, "see you tomorrow", true],
     [enHooks, "bye 👋🏽", true],
     [enHooks, "are we done?", false],
     [enHooks, "that's all?", false],
@@ -224,6 +262,32 @@ try {
     const fired = event.prompt.text !== text
     ok(fired === expected, `${JSON.stringify(text)} ${expected ? "debe" : "no debe"} disparar el cierre`)
   }
+
+  // 5b. Independent session hook degradation: rejection of 'context' does not disable 'prompt'.
+  const partHooks = { context: [], prompt: [] }
+  const partCtx = {
+    location: { directory: vault },
+    session: {
+      hook: async (name, fn) => {
+        if (name === "context") throw new Error("context rejected by host")
+        partHooks[name].push(fn)
+      },
+    },
+    tool: { hook: async () => {} },
+  }
+  const partMod = await import(pathToFileURL(join(PKG, "plugin", "brain-vault", "index.js")).href + "?v=part-hooks")
+  const warnList = []
+  const origW = console.warn
+  console.warn = (msg) => warnList.push(String(msg))
+  try {
+    await partMod.default.setup(partCtx)
+  } finally {
+    console.warn = origW
+  }
+  ok(partHooks.prompt.length === 1, "prompt hook se registra aun cuando context falla")
+  const promptEv = { prompt: { text: "chao" } }
+  partHooks.prompt[0](promptEv)
+  ok(promptEv.prompt.text.includes("Señal de cierre detectada"), "prompt hook funciona tras fallo de context")
 
   // 6. The tool hook replaces the input instead of mutating the caller's object.
   const original = { filePath: join(vault, "📝 Notes", "reemplazo.md"), content: "# nueva" }
@@ -247,6 +311,8 @@ try {
     "+# ya tipada",
     "*** Add File: 📝 Notes/datos.txt",
     "+texto",
+    "*** Add File: \"📝 Notes/desde-patch-quotes.md\"",
+    "+# Con comillas",
     "*** Update File: 📝 Notes/vieja.md",
     "@@",
     "-# nota que ya existe",
@@ -264,7 +330,8 @@ try {
   ok(patched.includes("*** Add File: 👤 CRM/con-fm.md\n+---\n+type: person\n+---\n"), "patch: una nota con frontmatter no se duplica")
   ok(patched.includes("*** Add File: 📝 Notes/datos.txt\n+texto\n"), "patch: un archivo que no es markdown no se toca")
   ok(patched.includes("*** Update File: 📝 Notes/vieja.md\n@@\n-# nota que ya existe\n+# nota editada\n"), "patch: una actualización no se toca")
-  ok((patched.match(/\+type: /g) || []).length === 2, "patch: solo la nota nueva gana frontmatter")
+  ok(patched.includes("*** Add File: \"📝 Notes/desde-patch-quotes.md\"\n+---\n+type: note"), "patch con comillas recibe frontmatter")
+  ok((patched.match(/\+type: /g) || []).length === 3, "patch: las notas nuevas ganan frontmatter")
   const applyPatch = { tool: "apply_patch", input: { patchText: "*** Begin Patch\n*** Add File: 📓 Journals/2026-01-02.md\n+hoy\n*** End Patch" } }
   await hook(applyPatch)
   ok(applyPatch.input.patchText.includes("+type: journal"), "apply_patch (nombre de v1) también recibe frontmatter")

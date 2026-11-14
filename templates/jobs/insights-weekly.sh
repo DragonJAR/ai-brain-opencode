@@ -13,7 +13,8 @@ job_log "/insights con ${COUNT} entradas"
 command -v opencode >/dev/null || job_fail "opencode no disponible"
 
 # La fecha del informe sigue la zona horaria del vault, no la del host.
-DATE_TAG="$(brain_config "$CFG" today 2>> "$LOG")" || DATE_TAG="$(date '+%Y-%m-%d')"
+DATE_TAG="$(brain_config "$CFG" today 2>> "$LOG")" || true
+[ -n "${DATE_TAG:-}" ] || DATE_TAG="$(date '+%Y-%m-%d')"
 TIMEOUT_SECONDS=900
 TASK="revisión semanal de mis entradas de diario. Guarda el informe en 📝 Notes/insights-${DATE_TAG}.md y no hagas preguntas."
 

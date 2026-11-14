@@ -55,4 +55,13 @@ if MOCK_OPENCODE_HELP="$TMP_ROOT/help-noauto.txt" bash "$JOB" > "$TMP_ROOT/out.t
 fi
 grep -F '<run>' "$MOCK_OPENCODE_CALLS" | grep -vqF '<--help>' && fail "ran opencode without --auto"
 
+# 4. The report date tag uses the vault timezone from brain-config.json.
+mkdir -p "$VAULT/⚙️ Meta"
+cat > "$VAULT/⚙️ Meta/brain-config.json" <<'JSON'
+{"timezone": "Asia/Tokyo"}
+JSON
+run_job
+EXPECTED_TAG="$(python3 -c 'import datetime; from zoneinfo import ZoneInfo; print(datetime.datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d"))')"
+has "insights-${EXPECTED_TAG}.md" "the task prompt did not use the vault timezone date tag ($EXPECTED_TAG)"
+
 printf 'insights weekly: ok\n'

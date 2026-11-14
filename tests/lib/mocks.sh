@@ -324,7 +324,7 @@ if [ "${1:-}" = -C ]; then
     rev-parse) [ -f "$repo/.git/mock-head" ] && cat "$repo/.git/mock-head" && exit 0; exit 1 ;;
     fetch) exit "${MOCK_GIT_FETCH_RC:-0}" ;;
     checkout) printf '%s\n' "${@: -1}" > "$repo/.git/mock-head"; exit 0 ;;
-    init) mkdir -p "${MOCK_VAULT:-$repo}/.git"; exit 0 ;;
+    init) mkdir -p "${repo:-${MOCK_VAULT}}/.git"; exit 0 ;;
     symbolic-ref) exit 0 ;;
     status)
       # MOCK_GIT_CLEAN=1 simula un árbol limpio (ejercita el camino "sin cambios").

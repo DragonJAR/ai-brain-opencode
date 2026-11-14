@@ -64,6 +64,8 @@ keep_structural() {
     scrubbed="$(printf '%s\n' "$line" | sed -E \
       -e 's/[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)*example\.(com|org|net)//g' \
       -e 's/[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)*[A-Za-z0-9-]+\.invalid//g' \
+      -e 's#ssh://[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+##g' \
+      -e 's#[A-Za-z0-9._-]+@(github|gitlab|bitbucket)\.[A-Za-z0-9.-]+[:/]##g' \
       -e 's/(^|[^A-Za-z0-9._%+-])git@[A-Za-z0-9.-]+:/\1/g')"
     if printf '%s\n' "$scrubbed" | grep -qE "$STRUCT_RE"; then
       printf '%s\n' "$line"

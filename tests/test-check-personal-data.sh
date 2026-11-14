@@ -85,6 +85,25 @@ if gate "$P" "$TMP_ROOT/terms-owner.txt"; then
   fail "the owner's name outside the repository URL was not flagged"
 fi
 
+# 6. Git SSH URLs (ssh://git@... and git@github/gitlab/bitbucket) are not flagged as emails.
+P="$TMP_ROOT/pkg-git-ssh"
+clean_pkg "$P"
+cat > "$P/install.sh" <<'SH'
+ssh://git@github.com/*) url="github.com/${url#ssh://git@github.com/}" ;;
+git@github.com:DragonJAR/ai-brain-opencode.git
+git@gitlab.com/group/repo.git
+git@bitbucket.org:team/repo.git
+SH
+gate "$P" "$TMP_ROOT/terms-lf.txt" || fail "git SSH URLs were incorrectly flagged as emails: $(cat "$TMP_ROOT/gate.txt")"
+
+# But an email at github.com without SSH delimiters is still flagged.
+P="$TMP_ROOT/pkg-github-email"
+clean_pkg "$P"
+printf 'contact %s@%s for info\n' developer github.com > "$P/README.md"
+if gate "$P" "$TMP_ROOT/terms-lf.txt"; then
+  fail "an actual email address at github.com was not flagged"
+fi
+
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: personal data gate had %s failures\n' "$failures" >&2
   exit 1

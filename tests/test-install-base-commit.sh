@@ -17,7 +17,7 @@ fail() {
 }
 
 TMP_ROOT="$(ai_brain_test_root install-base-commit)"
-trap 'rm -rf "$TMP_ROOT"' EXIT
+trap 'unset MOCK_GIT_REAL 2>/dev/null || true; rm -rf "$TMP_ROOT"' EXIT
 REAL_GIT="$(command -v git)"
 BIN="$TMP_ROOT/bin"
 ai_brain_mock_platform "$BIN"

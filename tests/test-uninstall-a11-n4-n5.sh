@@ -18,9 +18,10 @@ fail() {
   failures=$((failures + 1))
 }
 
+ORIGINAL_PATH="$PATH"
 setup_install_env() {
   local root="$1"
-  mkdir -p "$root/bin" "$root/vault"
+  mkdir -p "$root/bin" "$root/vault" "$root/userhome"
   MOCK_UNAME=Linux
   MOCK_GIT_CALLS="$root/git-calls.log"
   MOCK_CRONTAB_STATE="$root/crontab-state"
@@ -36,9 +37,10 @@ setup_install_env() {
   ai_brain_mock_git "$root/bin"
   ai_brain_mock_opencode "$root/bin"
   export MOCK_UNAME MOCK_GIT_CALLS MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES MOCK_VAULT
-  export PATH="$root/bin:$PATH"
-  export TMPDIR="$root"
-  unset BRAIN_STARTER_PIN || true
+  export PATH="$root/bin:$ORIGINAL_PATH"
+  export TMPDIR="$root" HOME="$root/userhome"
+  export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+  unset MOCK_GIT_REAL MOCK_GIT_IDENTITY MOCK_GIT_CLEAN MOCK_GIT_FETCH_RC MOCK_GIT_PULL_RC BRAIN_STARTER_PIN || true
 }
 
 # --- Flag parser -------------------------------------------------------------
@@ -72,9 +74,10 @@ else
   # Flag before vault path
   VAULT_FLAG_B="$FLAG_ROOT/vault-b"
   mkdir -p "$VAULT_FLAG_B"
-  MOCK_VAULT="$VAULT_FLAG_B"
+  export MOCK_VAULT="$VAULT_FLAG_B"
   if ! bash "$PKG/install.sh" "$VAULT_FLAG_B" >"$FLAG_ROOT/install-b.txt" 2>&1; then
     fail "second fixture install failed"
+    cat "$FLAG_ROOT/install-b.txt" >&2
   else
     set +e
     bash "$PKG/uninstall.sh" --purge-clones "$VAULT_FLAG_B" >"$FLAG_ROOT/purge-before.txt" 2>"$FLAG_ROOT/purge-before.err"

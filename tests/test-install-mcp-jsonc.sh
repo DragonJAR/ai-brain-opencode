@@ -16,7 +16,7 @@ fail() {
 }
 
 TMP_ROOT="$(ai_brain_test_root install-mcp-jsonc)"
-trap 'rm -rf "$TMP_ROOT"' EXIT
+trap 'unset MOCK_GIT_CLEAN 2>/dev/null || true; rm -rf "$TMP_ROOT"' EXIT
 BIN="$TMP_ROOT/bin"
 ai_brain_mock_platform "$BIN"
 ai_brain_mock_git "$BIN"

@@ -24,7 +24,7 @@ DEFAULT="$(python3 "$PKG/scripts/lib/brain_config.py" "$TMP_ROOT/missing.json" l
 
 # 1. Each dangerous value is dropped (with a warning) and the valid entry stays.
 for bad in '.' './' '..\\x' 'a\\b' ':/' ':(glob)**' ':!📓 Journals' '*' '📓 Journals/*.md' 'a?' '[ab]' \
-           '/etc' '../x' '-n' 'C:/x' '.git' '.git/config'; do
+           '/etc' '../x' '-n' 'C:/x' '.git' '.git/config' $'a\nb' $'a\rb'; do
   python3 - "$BRC" "$bad" <<'PY'
 import json, sys
 json.dump({"snapshot_paths": [sys.argv[2], "📓 Journals"]}, open(sys.argv[1], "w", encoding="utf-8"), ensure_ascii=False)

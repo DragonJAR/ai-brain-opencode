@@ -23,11 +23,12 @@
 set -euo pipefail
 unset CDPATH
 
-PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 PACKAGE_REPO="https://github.com/DragonJAR/ai-brain-opencode"
 LIB="$PKG/scripts/lib"
 OS="$(uname -s)"
 VAULT="" CONFIG="" WIRE=0 WITH_MCP=0 WITH_OBSIDIAN=0 WITH_SCHEDULE=0 DRY_RUN=0 UPDATE=0
+if [ "${BRAIN_UPDATING:-0}" = 1 ]; then UPDATE=1; fi
 
 for required in common.sh python3.sh ownership.py wire.py brain_config.py vault_layout.py; do
   [ -f "$LIB/$required" ] || { printf '  ✗ paquete incompleto: falta scripts/lib/%s. No se modificó el vault\n' "$required" >&2; exit 1; }
@@ -93,7 +94,7 @@ update_package() {
   ok "paquete actualizado desde $PACKAGE_REPO: $before -> $after"
 }
 
-if [ "$UPDATE" = 1 ]; then
+if [ "$UPDATE" = 1 ] && [ "${BRAIN_UPDATING:-0}" = 0 ]; then
   if [ "$WIRE" = 1 ] || [ "$DRY_RUN" = 1 ] || [ -n "$CONFIG" ] || [ "$WITH_MCP" = 1 ] || [ "$WITH_OBSIDIAN" = 1 ]; then
     usage_error "--update solo admite la ruta de un vault y --with-schedule"
   fi
@@ -101,8 +102,8 @@ if [ "$UPDATE" = 1 ]; then
   update_package
   [ -n "$VAULT" ] || exit 0
   # El install.sh nuevo hace el re-cableado: este proceso sigue leyendo el anterior.
-  if [ "$WITH_SCHEDULE" = 1 ]; then exec bash "$PKG/install.sh" "$VAULT" --wire --with-schedule; fi
-  exec bash "$PKG/install.sh" "$VAULT" --wire
+  if [ "$WITH_SCHEDULE" = 1 ]; then BRAIN_UPDATING=1 exec bash "$PKG/install.sh" "$VAULT" --wire --with-schedule; fi
+  BRAIN_UPDATING=1 exec bash "$PKG/install.sh" "$VAULT" --wire
 fi
 
 [ -n "$VAULT" ] || usage_error "falta la ruta del vault"
@@ -198,7 +199,7 @@ EXAMPLE="$PKG/templates/brain-config.example.json"
 [ -f "$EXAMPLE" ] || die "paquete incompleto: falta templates/brain-config.example.json. No se modificó el vault"
 
 if [ "$WIRE" = 0 ] && [ "$DRY_RUN" = 0 ]; then mkdir -p "$VAULT"; fi
-if [ -d "$VAULT" ]; then VAULT="$(cd "$VAULT" && pwd)"; fi
+if [ -d "$VAULT" ]; then VAULT="$(cd "$VAULT" && pwd -P)"; fi
 SLUG="$(vault_slug "$VAULT")"
 R="$VAULT/.opencode/skills/ai-brain-starter"
 MANIFEST="$VAULT/$BRAIN_MANIFEST_REL"
@@ -584,7 +585,10 @@ for pid, repo in PLUGINS.items():
     if (t / "main.js").exists() and (t / "manifest.json").exists():
         print(f"  + {pid} ya instalado"); continue
     try:
-        req = urllib.request.Request(f"https://api.github.com/repos/{repo}/releases/latest", headers={"Accept": "application/vnd.github+json"})
+        req = urllib.request.Request(
+            f"https://api.github.com/repos/{repo}/releases/latest",
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "ai-brain-opencode"}
+        )
         rel = json.load(urllib.request.urlopen(req, timeout=30))
         z = next((a for a in rel.get("assets", []) if a["name"].endswith(".zip")), None)
         t.mkdir(parents=True, exist_ok=True)

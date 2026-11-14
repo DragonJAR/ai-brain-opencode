@@ -205,7 +205,7 @@ def main(argv):
         else:
             positional.append(argv[index])
             index += 1
-    if len(positional) != 1 or mode not in ("link", "copy") or any(name not in SECTIONS for name in names):
+    if len(positional) != 1 or mode not in ("link", "copy") or not names or any(name not in SECTIONS for name in names):
         print("uso: python3 wire.py <vault> [--mode link|copy] [--only skills,commands,scripts]", file=sys.stderr)
         return 1
     vault = pathlib.Path(positional[0])

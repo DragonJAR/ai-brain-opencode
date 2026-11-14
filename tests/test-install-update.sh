@@ -110,6 +110,9 @@ MOCK_VAULT="$V" bash "$COPY/install.sh" "$V" > "$TMP_ROOT/install.out" 2>&1 || f
 run_update "$V" || fail "--update <vault> failed: $(tail -3 "$TMP_ROOT/err")"
 pulled || fail "--update <vault> did not pull"
 grep -q 'Re-cableado completo' "$TMP_ROOT/out" || fail "--update <vault> did not re-wire the vault"
+! grep -q 'starter existente; --wire no clona ni actualiza' "$TMP_ROOT/out" || fail "--update treated re-wire as pure --wire without updating vendor"
+grep -q 'starter' "$TMP_ROOT/err" || grep -q 'starter en el commit fijado' "$TMP_ROOT/out" \
+  || fail "--update did not attempt to update the vendor starter"
 if bash "$COPY/install.sh" --update --with-mcp > /dev/null 2>&1; then fail "--update accepted --with-mcp"; fi
 
 # 8. The scheduled update job never fetches the package itself.

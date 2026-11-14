@@ -40,6 +40,9 @@ vault_slug() {
 # run_python <args>: el intérprete elegido por pick_python3. PY3 puede ser
 # "py -3" (dos palabras), por eso se expande sin comillas y solo aquí.
 run_python() {
+  if [ -z "${PY3:-}" ]; then
+    pick_python3 || return 1
+  fi
   # shellcheck disable=SC2086
   $PY3 "$@"
 }
@@ -229,6 +232,7 @@ job_lock_write_pid() {
 # TERM y luego KILL al grupo. Git Bash: `taskkill /T /F` sobre el PID de Windows.
 # Python y no `timeout`: no existe en macOS y en Windows es otro programa.
 run_with_timeout() {
+  [ $# -ge 2 ] || return 2
   local seconds="$1" mode=group
   shift
   if is_windows; then mode=tree; fi

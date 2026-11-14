@@ -104,6 +104,27 @@ MOCK_UNAME=MINGW64_NT-10.0 bash "$W/scripts/verify.sh" > "$TMP_ROOT/verify-win.t
 grep -Fq '✗ skills copiadas' "$TMP_ROOT/verify-win.txt" \
   || fail "verify counted the humanizer clone as a copied skill: $(grep -F 'skills' "$TMP_ROOT/verify-win.txt")"
 
+# 8. run_with_timeout returns 2 if called with fewer than 2 arguments.
+bash -c ". '$PKG/scripts/lib/common.sh' && run_with_timeout 1" >/dev/null 2>&1 && rc=0 || rc=$?
+[ "$rc" = 2 ] || fail "run_with_timeout without command returned $rc (expected 2)"
+
+# 9. run_python lazily initializes pick_python3 when PY3 is unset.
+bash -c "unset PY3; . '$PKG/scripts/lib/common.sh'; run_python -c 'import sys; sys.exit(0)'" >/dev/null 2>&1 \
+  || fail "run_python failed when PY3 was unset before invocation"
+
+# 10. brain_config.py seed/list require argument with clear error message.
+cfg_err="$(python3 "$PKG/scripts/lib/brain_config.py" "$TMP_ROOT/dummy.json" seed 2>&1 || true)"
+echo "$cfg_err" | grep -Fq 'seed requiere el nombre del vault' \
+  || fail "brain_config seed without vault name did not emit clear message (got: $cfg_err)"
+cfg_err="$(python3 "$PKG/scripts/lib/brain_config.py" "$TMP_ROOT/dummy.json" list 2>&1 || true)"
+echo "$cfg_err" | grep -Fq 'list requiere una clave' \
+  || fail "brain_config list without key did not emit clear message (got: $cfg_err)"
+
+# 11. wire.py rejects empty --only flag.
+wire_err="$(python3 "$PKG/scripts/lib/wire.py" "$TMP_ROOT/dummy-vault" --only "" 2>&1 || true)"
+echo "$wire_err" | grep -Fq 'uso: python3 wire.py' \
+  || fail "wire.py accepted empty --only without usage error (got: $wire_err)"
+
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: shell robustness had %s failures\n' "$failures" >&2
   exit 1

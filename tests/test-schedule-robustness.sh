@@ -111,6 +111,31 @@ for enc in cp1252 utf-16; do
     || fail "the $enc schtasks CSV was not decoded (got: $(cat "$TMP_ROOT/win-$enc.txt"))"
 done
 
+# 6. schtasks: stale task in previous is retired upon new schedule install.
+WIN_MANIFEST="$WIN_VAULT/.opencode/brain-vault-install-manifest.json"
+python3 - "$WIN_MANIFEST" "$PKG/scripts/lib/ownership.py" <<'PY'
+import json, subprocess, sys
+manifest, tool = sys.argv[1:3]
+# Inject a previously recorded task that is not in the current job list
+stale = "ai-brain win-vault old-retired-job"
+curr = json.loads(subprocess.check_output([sys.executable, tool, manifest, "cron-json"]).decode())
+subprocess.check_call([sys.executable, tool, manifest, "set-cron", json.dumps(curr + [stale], ensure_ascii=False)])
+PY
+printf '"\\\\ai-brain win-vault old-retired-job","N/A","Listo"\r\n' > "$MOCK_SCHTASKS_STATE"
+: > "$MOCK_SCHTASKS_CALLS"
+MOCK_UNAME=MINGW64_NT-10.0 bash "$PKG/scripts/schedule.sh" "$WIN_VAULT" > "$TMP_ROOT/win-retire.txt" 2>&1 \
+  || fail "schtasks schedule with stale task failed: $(cat "$TMP_ROOT/win-retire.txt")"
+grep -Fq 'tarea obsoleta eliminada: ai-brain win-vault old-retired-job' "$TMP_ROOT/win-retire.txt" \
+  || fail "stale task was not retired on Windows (got: $(cat "$TMP_ROOT/win-retire.txt"))"
+grep -Fq '/Delete /F /TN ai-brain win-vault old-retired-job' "$MOCK_SCHTASKS_CALLS" \
+  || fail "schtasks /Delete was not called for the stale task"
+
+# 7. schedule.sh accepts --dry-run --remove in either order.
+MOCK_UNAME=MINGW64_NT-10.0 bash "$PKG/scripts/schedule.sh" "$WIN_VAULT" --dry-run --remove > "$TMP_ROOT/win-dry-rev.txt" 2>&1 \
+  || fail "schedule.sh failed with --dry-run --remove: $(cat "$TMP_ROOT/win-dry-rev.txt")"
+! grep -qi 'argumento inesperado' "$TMP_ROOT/win-dry-rev.txt" \
+  || fail "schedule.sh --dry-run --remove gave unexpected argument error"
+
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: schedule robustness had %s failed assertions\n' "$failures" >&2
   exit 1

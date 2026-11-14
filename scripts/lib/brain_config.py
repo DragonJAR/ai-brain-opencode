@@ -95,7 +95,7 @@ def read_user(path):
 
 # Rejected anywhere in a path handed to git: Windows separators, and the glob
 # characters git would expand in a pathspec.
-UNSAFE_PATH_CHARS = set("\\*?[")
+UNSAFE_PATH_CHARS = set("\\*?[\r\n\0")
 DRIVE_RE = re.compile(r"^[A-Za-z]:")
 
 
@@ -206,6 +206,8 @@ def main(argv):
     path, action, args = argv[0], argv[1], argv[2:]
     try:
         if action == "seed":
+            if not args:
+                raise ConfigError("seed requiere el nombre del vault")
             seed(path, args[0])
             return 0
         if action == "validate":
@@ -220,6 +222,8 @@ def main(argv):
             for key in args:
                 print(render(lookup(config, key)))
         elif action == "list":
+            if not args:
+                raise ConfigError("list requiere una clave")
             value = lookup(config, args[0])
             for item in value if isinstance(value, list) else []:
                 print(item)

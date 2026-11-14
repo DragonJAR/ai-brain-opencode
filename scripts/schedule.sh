@@ -22,8 +22,11 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --help|-h) usage; exit 0 ;;
     --remove)
-      [ "$MODE" = install ] || usage_error "argumento inesperado: $1"
-      MODE=--remove ;;
+      case "$MODE:$REMOVE_DRY_RUN" in
+        install:0) MODE=--remove ;;
+        --dry-run:0) MODE=--remove; REMOVE_DRY_RUN=1 ;;
+        *) usage_error "argumento inesperado: $1" ;;
+      esac ;;
     --dry-run)
       case "$MODE:$REMOVE_DRY_RUN" in
         install:0) MODE=--dry-run ;;
@@ -204,7 +207,7 @@ PY
 read_crontab() {
   local output="$1" errors rc
   brain_mktemp errors crontab-error
-  if crontab -l > "$output" 2> "$errors"; then
+  if LC_ALL=C crontab -l > "$output" 2> "$errors"; then
     rm -f "$errors"
     return 0
   else
@@ -272,8 +275,10 @@ PY
 json_lines() {
   printf '%s\n' "$1" | run_python -c 'import json, sys
 sys.stdout.reconfigure(encoding="utf-8", newline="\n")
-for name in json.load(sys.stdin):
-    print(name)'
+raw = sys.stdin.read().strip()
+if raw:
+    for name in json.loads(raw):
+        print(name)'
 }
 
 lines_json() {
@@ -370,6 +375,21 @@ windows_schedule() {
       fi
       index=$((index + 1))
     done
+    # Retira tareas registradas anteriormente que ya no forman parte de este vault.
+    while IFS= read -r stale; do
+      [ -n "$stale" ] || continue
+      if ! printf '%s' "$wanted" | grep -qxF "$stale"; then
+        if printf '%s\n' "$existing" | grep -qxF "$stale"; then
+          if schtasks_native /Delete /F /TN "$stale"; then
+            ok "tarea obsoleta eliminada: $stale"
+          else
+            warn "no se pudo borrar la tarea obsoleta: $stale"
+          fi
+        fi
+      fi
+    done <<EOF
+$previous
+EOF
     # Los nombres se registran ANTES de crear: una falla a medias nunca deja
     # tareas instaladas sin dueño.
     owner_manifest set-cron "$(printf '%s' "$wanted" | lines_json)" \
@@ -472,7 +492,7 @@ $JOB_TABLE
 EOF
 # Una sola lectura de la config: valida HH:MM y cae al valor por defecto con aviso.
 TIMES="$(brain_config "$BRC" get "${JOB_KEYS[@]}")" || die "no se pudieron resolver los horarios de los trabajos"
-while IFS= read -r job_time; do JOB_TIMES+=("$job_time"); done <<EOF
+while IFS= read -r job_time; do job_time="${job_time%$'\r'}"; JOB_TIMES+=("$job_time"); done <<EOF
 $TIMES
 EOF
 [ "${#JOB_TIMES[@]}" -eq "${#JOB_NAMES[@]}" ] || die "no se pudieron resolver los horarios de los trabajos"
@@ -583,6 +603,7 @@ PL
   # se va: de lo contrario seguiría disparando un script que no existe.
   retire_stale_agent() {
     local agent_path="$1" label="$2" index=0
+    case "$label" in "$PREFIX".*) ;; *) return 0 ;; esac
     while [ "$index" -lt "${#JOB_NAMES[@]}" ]; do
       [ "$label" = "$PREFIX.${JOB_NAMES[$index]}" ] && return 0
       index=$((index + 1))

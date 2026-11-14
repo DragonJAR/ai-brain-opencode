@@ -33,14 +33,18 @@ export PATH="$TMP_ROOT/bin:$PATH"
 export TMPDIR="$TMP_ROOT"
 
 V="$TMP_ROOT/vault"
-mkdir -p "$V/scripts/jobs" "$V/scripts/lib" "$V/.opencode"
+mkdir -p "$V/scripts/jobs" "$V/scripts/lib" "$V/.opencode" "$V/.opencode/commands" "$V/⚙️ Meta"
 
-# Three package-owned copy artifacts that must disappear on uninstall.
+# Package-owned copy artifacts that must disappear on uninstall.
 # Plus a copy-mode wiring tree (Windows-style skill copy) that must go WITHOUT --purge-clones.
 mkdir -p "$V/.opencode/skills/journal"
 printf '%s\n' '# copied skill' > "$V/.opencode/skills/journal/SKILL.md"
 printf '%s\n' '# pick_python3 stub' > "$V/scripts/lib/python3.sh"
 chmod 644 "$V/scripts/lib/python3.sh"
+printf '%s\n' '# package audit tool' > "$V/scripts/audit.py"
+chmod 755 "$V/scripts/audit.py"
+printf '%s\n' '# wired command copy' > "$V/.opencode/commands/ingest.md"
+chmod 644 "$V/.opencode/commands/ingest.md"
 printf '%s\r\n' \
   '@echo off' \
   'set "JOB=%~1"' \
@@ -52,9 +56,11 @@ chmod 644 "$V/scripts/jobs/ai-brain-run.cmd"
 printf '%s\n' '# vault instructions (Windows copy of AGENTS.md)' > "$V/CLAUDE.md"
 chmod 644 "$V/CLAUDE.md"
 
-# Registered file the user will edit after the seal — must be preserved.
+# Registered files the user will edit after the seal — must be preserved.
 printf '%s\n' '#!/usr/bin/env bash' 'echo original-verify' > "$V/scripts/verify.sh"
 chmod 755 "$V/scripts/verify.sh"
+printf '%s\n' '# original journal config' > "$V/⚙️ Meta/journal-config.md"
+chmod 644 "$V/⚙️ Meta/journal-config.md"
 
 # Sealed manifest (same seal recipe as the scripts/ symlink refuse fixture).
 python3 - "$V" "$PKG/scripts/lib" <<'PY'
@@ -66,9 +72,12 @@ import ownership
 vault = pathlib.Path(sys.argv[1])
 paths = [
     "scripts/lib/python3.sh",
+    "scripts/audit.py",
+    ".opencode/commands/ingest.md",
     "scripts/jobs/ai-brain-run.cmd",
     "CLAUDE.md",
     "scripts/verify.sh",
+    "⚙️ Meta/journal-config.md",
 ]
 files = {}
 for rel in paths:
@@ -101,9 +110,11 @@ data["seal"] = hashlib.sha256(
 )
 PY
 
-# User edits a registered file after install — fingerprint no longer matches.
+# User edits registered files after install — fingerprint no longer matches.
 printf '%s\n' '#!/usr/bin/env bash' 'echo user-edited-verify' > "$V/scripts/verify.sh"
 chmod 755 "$V/scripts/verify.sh"
+printf '%s\n' '# user-edited-journal-config' > "$V/⚙️ Meta/journal-config.md"
+chmod 644 "$V/⚙️ Meta/journal-config.md"
 
 set +e
 bash "$PKG/uninstall.sh" "$V" >"$TMP_ROOT/uninstall.txt" 2>"$TMP_ROOT/uninstall.err"
@@ -116,7 +127,7 @@ if [ "$rc" -ne 0 ]; then
   cat "$TMP_ROOT/uninstall.all" >&2
 fi
 
-for rel in "scripts/lib/python3.sh" "scripts/jobs/ai-brain-run.cmd" "CLAUDE.md" ".opencode/skills/journal"; do
+for rel in "scripts/lib/python3.sh" "scripts/audit.py" ".opencode/commands/ingest.md" "scripts/jobs/ai-brain-run.cmd" "CLAUDE.md" ".opencode/skills/journal"; do
   if [ -e "$V/$rel" ] || [ -L "$V/$rel" ]; then
     fail "owned copy artifact still present: $rel"
   fi
@@ -138,8 +149,31 @@ elif ! grep -Fq 'user-edited-verify' "$V/scripts/verify.sh"; then
   fail "user-modified scripts/verify.sh content was altered"
 fi
 
+if [ ! -f "$V/⚙️ Meta/journal-config.md" ]; then
+  fail "user-modified ⚙️ Meta/journal-config.md was removed"
+elif ! grep -Fq 'user-edited-journal-config' "$V/⚙️ Meta/journal-config.md"; then
+  fail "user-modified ⚙️ Meta/journal-config.md content was altered"
+fi
+
+# Fail-closed symlink check: .opencode/commands replaced by symlink rejects uninstall
+if ai_brain_need_symlinks "uninstall rechaza .opencode/commands como symlink"; then
+  VS="$TMP_ROOT/symlink-vault"
+  mkdir -p "$VS/.opencode" "$TMP_ROOT/foreign-target"
+  ln -s "$TMP_ROOT/foreign-target" "$VS/.opencode/commands"
+  set +e
+  sym_out="$(bash "$PKG/uninstall.sh" "$VS" 2>&1)"
+  sym_rc=$?
+  set -e
+  if [ "$sym_rc" -eq 0 ]; then
+    fail "uninstall succeeded despite .opencode/commands symlink"
+  fi
+  if ! printf '%s\n' "$sym_out" | grep -Fq ".opencode/commands/ es un symlink"; then
+    fail "uninstall did not output symlink error for .opencode/commands: $sym_out"
+  fi
+fi
+
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: uninstall managed-copy residuals had %s failed assertions\n' "$failures" >&2
   exit 1
 fi
-printf 'PASS: uninstall removes python3.sh, ai-brain-run.cmd, CLAUDE.md copy; cleans empty jobs/lib; preserves user edits\n'
+printf 'PASS: uninstall removes python3.sh, audit.py, ingest.md copy, ai-brain-run.cmd, CLAUDE.md copy; cleans empty jobs/lib; preserves user edits and rejects symlinks\n'

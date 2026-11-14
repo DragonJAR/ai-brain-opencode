@@ -38,6 +38,11 @@ files = {
     "📝 Notes/bom.md": "\ufeff" + TYPED + "bom\n",
     "📝 Notes/empty-type.md": "---\ntype:\ntags: x\n---\n\nbody\n",
     "📝 Notes/quoted-empty-type.md": "---\ntype: \"\"\n---\n\nbody\n",
+    "📝 Notes/null-type.md": "---\ntype: Null\n---\n\nbody\n",
+    "📝 Notes/tilde-type.md": "---\ntype: ~\n---\n\nbody\n",
+    "📝 Notes/none-type.md": "---\ntype: None\n---\n\nbody\n",
+    "📝 Notes/dots-delim.md": "---\ntype: note\n...\n\nbody with closing dots\n",
+    "📝 Notes/thematic-break.md": "---\ntype: note\n---\n----\nbody with 4-dash break\n",
     "📝 Notes/Raw/a.pdf": "",
     "📝 Notes/Raw/port.pdf": "",
     "📝 Notes/Raw/sub/deep.md": "deep source\n",
@@ -61,6 +66,8 @@ hub = [
     "````",
     "Inline `[[in-inline]]` and ``a `[[in-double]]` b``.",
     "[[after-fences-missing]]",
+    "[[./v1.2 plan]] [[./Note]] [[./att/x.pdf]]",
+    "[[ #heading-only ]] [[ ]]",
 ]
 files["💼 Business/hub.md"] = "\n".join(hub) + "\n"
 for rel, text in files.items():
@@ -91,9 +98,13 @@ if "📝 Notes/x.md" not in orphans:
 untyped = set(r["untyped_notes"])
 if "📝 Notes/bom.md" in untyped:
     problems.append("a UTF-8 BOM before the frontmatter hid its type")
-for rel in ("📝 Notes/empty-type.md", "📝 Notes/quoted-empty-type.md"):
+for rel in ("📝 Notes/empty-type.md", "📝 Notes/quoted-empty-type.md",
+            "📝 Notes/null-type.md", "📝 Notes/tilde-type.md", "📝 Notes/none-type.md"):
     if rel not in untyped:
-        problems.append("an empty type: was accepted in %s" % rel)
+        problems.append("an empty/null type: was accepted in %s" % rel)
+for rel in ("📝 Notes/dots-delim.md", "📝 Notes/thematic-break.md"):
+    if rel in untyped:
+        problems.append("valid frontmatter was rejected in %s" % rel)
 pending = set(r["pending_raw"])
 if "📝 Notes/Raw/a.pdf" in pending:
     problems.append("a source logged by its exact path is still pending")

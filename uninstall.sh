@@ -39,7 +39,7 @@ pick_python3 || die "falta Python >= 3.9 (python3, py -3 o python)"
 VAULT="$(cd "$VAULT" && pwd)"
 MANIFEST="$VAULT/$BRAIN_MANIFEST_REL"
 
-for rel in "scripts" "scripts/jobs" ".opencode" ".opencode/skills" ".opencode/plugins"; do
+for rel in "scripts" "scripts/jobs" "scripts/lib" ".opencode" ".opencode/skills" ".opencode/commands" ".opencode/plugins" "⚙️ Meta/scripts"; do
   if [ -L "$VAULT/$rel" ]; then
     die "$rel/ es un symlink; desinstalación rechazada y manifiesto preservado"
   fi

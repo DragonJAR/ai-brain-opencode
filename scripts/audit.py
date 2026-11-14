@@ -27,7 +27,7 @@ from vault_layout import RAW_PREFIX, TYPED_FOLDERS  # noqa: E402
 
 # Target, then an optional #heading or ^block, then an optional |alias.
 WIKILINK_RE = re.compile(r"\[\[([^\]|#^\r\n]+)(?:[#^][^\]|\r\n]*)?(?:\|[^\]\r\n]*)?\]\]")
-FRONTMATTER_RE = re.compile(r"^---\r?\n([\s\S]*?)\r?\n---")
+FRONTMATTER_RE = re.compile(r"^---\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)(?:\r?\n|$)")
 TYPE_ATTR_RE = re.compile(r"^type:[ \t]*(.*)$", re.MULTILINE)
 FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)")
@@ -101,7 +101,7 @@ def has_type(frontmatter: str) -> bool:
     if not match:
         return False
     value = match.group(1).split(" #", 1)[0].strip()
-    return value not in ("", '""', "''", "~", "null")
+    return value.lower() not in ("", '""', "''", "~", "null", "none")
 
 
 def ingest_logged_sources(log_text: str) -> set:
@@ -119,9 +119,10 @@ def ingest_logged_sources(log_text: str) -> set:
 
 
 def is_audited(rel_path: str) -> bool:
-    if rel_path in ROOT_EXCLUDED_FILES:
+    norm_rel = normalize_name(rel_path)
+    if norm_rel in ROOT_EXCLUDED_FILES or rel_path in ROOT_EXCLUDED_FILES:
         return False
-    return not any(rel_path.startswith(prefix) for prefix in ROOT_EXCLUDED_PATHS)
+    return not any(norm_rel.startswith(normalize_name(prefix)) for prefix in ROOT_EXCLUDED_PATHS)
 
 
 def scan_vault(vault_dir: pathlib.Path) -> dict:
@@ -160,8 +161,8 @@ def scan_vault(vault_dir: pathlib.Path) -> dict:
         return min(candidates, key=rank)
 
     def resolve_link(target, source_rel):
-        target_norm = target.strip().replace("\\", "/").strip("/")
-        if not target_norm:
+        target_norm = posixpath.normpath(target.strip().replace("\\", "/")).strip("/")
+        if not target_norm or target_norm == ".":
             return None
         key = link_key(target_norm)
 
@@ -200,8 +201,10 @@ def scan_vault(vault_dir: pathlib.Path) -> dict:
         # Auditoría de wikilinks
         for idx, line in enumerate(strip_code_blocks(content), start=1):
             for match in WIKILINK_RE.finditer(line):
-                total_wikilinks += 1
                 raw_target = match.group(1).strip()
+                if not raw_target:
+                    continue
+                total_wikilinks += 1
                 resolved = resolve_link(raw_target, rel_md)
                 if resolved:
                     if resolved in incoming_links and resolved != rel_md:
@@ -324,6 +327,13 @@ def format_human(report: dict, verbose: bool = False) -> str:
 
 
 def main():
+    # UTF-8 también en Windows, donde la consola usaría cp1252 y los símbolos del informe fallarían.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
+
     parser = argparse.ArgumentParser(description="Auditoría de integridad del vault.")
     parser.add_argument("vault", nargs="?", default=".", help="Ruta al vault (por defecto: .)")
     parser.add_argument("--json", action="store_true", help="Salida en formato JSON")
@@ -331,12 +341,6 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true", help="Mostrar listados completos")
 
     args = parser.parse_args()
-    # UTF-8 también en Windows, donde la consola usaría cp1252 y los símbolos del informe fallarían.
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8")
-        except (AttributeError, ValueError):
-            pass
     vault_path = pathlib.Path(args.vault).resolve()
     if not vault_path.is_dir():
         sys.stderr.write(f"Error: la ruta indicada no es un directorio: {vault_path}\n")

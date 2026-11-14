@@ -169,7 +169,8 @@ editaste se quedan.
 | `ya existe una tarea ajena` / `launch agent ajeno` | Otro vault tiene el mismo nombre de carpeta; renombra uno |
 
 Más: estado por plataforma y límites en [docs/COMPAT.md](docs/COMPAT.md), cambios en [CHANGELOG.md](CHANGELOG.md).
-Windows solo está cubierto por tests simulados; se agradecen reportes en equipos reales.
+En Windows la suite corre en el CI sobre un runner de GitHub (no bloqueante hasta que pase de forma estable) y aún
+no se ha comprobado en equipos de usuarios; se agradecen reportes.
 
 ## Licencia
 

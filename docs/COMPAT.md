@@ -38,7 +38,7 @@ mapea cada mecanismo, para saber qué está portado, qué se sustituyó y qué n
 | daily job (ramas, worktrees, disco) | trabajo programado diario: índice del diario + snapshot git |
 | session-end-hook.sh (cascade) | protocolo de sesión en AGENTS.md + hook de prompt |
 | post-tool-use-learnings.py | memoria indexada del entorno (Engram o equivalente) |
-| journal-preflight / index / metadata | scripts enlazados desde el clon (mismo código, sin copias) |
+| journal-preflight / index / metadata | scripts del clon: enlazados en macOS/Linux, copiados en Windows (mismo código) |
 
 **No aplican** (infraestructura exclusiva de Claude Code): worktrees y sesiones de CC (`snapshot-pending-work-on-stop`,
 `remove-ended-worktree`, `enforce-worktree-cap`, `surface-orphan-worktree-snapshots`, `warn-vault-session-in-worktree`,
@@ -54,7 +54,7 @@ hooks, y el chequeo de zona horaria en eventos de calendario.
 
 ## Plataformas
 
-macOS y Linux están soportados de punta a punta (symlinks POSIX + launchd/cron). **Windows nativo** está soportado directamente mediante Git for Windows: el instalador detecta entornos `MINGW*`/`MSYS*`/`CYGWIN*`, realiza el cableado mediante **copias** (`WIRE_MODE=copy`, sin symlinks del paquete) y programa los trabajos automáticos con **Task Scheduler** (`schtasks`, usando los horarios de la misma fuente única que cron/launchd). Requisitos reales en Windows nativo: Git for Windows (con `bash`), Python ≥3.9 (`python3`, `py -3` o `python`), `cygpath` y OpenCode CLI (`opencode run --help`). Evidencia: la ruta Windows está cubierta por fixtures simulados (`uname`/`schtasks` mock) y todavía no por una máquina Windows física; se declara así hasta que exista esa validación. No se requiere Developer Mode ni permisos de administrador. **WSL2** (ej. Ubuntu con cron manual: `sudo service cron start`) continúa disponible como alternativa de ejecución. Otras plataformas (p. ej. FreeBSD) se rechazan tempranamente antes de mutar el vault.
+macOS y Linux están soportados de punta a punta (symlinks POSIX + launchd/cron). **Windows nativo** está soportado directamente mediante Git for Windows: el instalador detecta entornos `MINGW*`/`MSYS*`/`CYGWIN*`, realiza el cableado mediante **copias** (`WIRE_MODE=copy`, sin symlinks del paquete) y programa los trabajos automáticos con **Task Scheduler** (`schtasks`, usando los horarios de la misma fuente única que cron/launchd). Requisitos reales en Windows nativo: Git for Windows (con `bash`), Python ≥3.9 (`python3`, `py -3` o `python`), `cygpath` y OpenCode CLI (`opencode run --help`). Evidencia: la ruta Windows está cubierta por fixtures simulados (`uname`/`schtasks` mock) y el CI corre la suite en un runner Windows de GitHub, informativo hasta que pase de forma estable; todavía no hay validación en un equipo de usuario, y se declara así hasta que exista. No se requiere Developer Mode ni permisos de administrador. **WSL2** (ej. Ubuntu con cron manual: `sudo service cron start`) continúa disponible como alternativa de ejecución. Otras plataformas (p. ej. FreeBSD) se rechazan tempranamente antes de mutar el vault.
 
 ## Cómo se compensa la diferencia de bloqueo
 
@@ -86,9 +86,9 @@ Cada pieza de lógica vive en un solo lugar de `scripts/lib/`, y `install.sh` co
 |---|---|
 | `ownership.py` | Manifiesto: sellado, huellas, lista de rutas gestionadas, instalación que preserva lo ajeno, desinstalación e informe de deriva |
 | `wire.py` | Cableado del starter (skills y scripts: symlinks en POSIX, copias en Windows; comandos: siempre copias adaptadas a OpenCode, herramienta `skill` y rutas `.opencode/`) y poda de lo que el starter retiró; lo usan `install.sh` y `update-brain.sh` |
-| `vault_layout.py` | Carpetas del vault, tipo de nota por carpeta y servidores MCP remotos. El plugin mantiene una copia de los tipos que un test compara |
+| `vault_layout.py` | Carpetas del vault, tipo de nota por carpeta, servidores MCP remotos, clones del vendor con su commit fijado (`VENDOR`), skills ocultos y comandos del starter que el paquete reemplaza. El plugin mantiene una copia de los tipos que un test compara |
 | `brain_config.py` | Lectura de `brain-config.json`: valores por defecto, validación y fallback. El plugin (JavaScript) mantiene una copia de los valores por defecto que un test compara |
-| `common.sh` | Mensajes, ayuda y errores de invocación de los scripts (`usage`, `usage_error`), detección de plataforma, intérprete Python y el arranque común de los trabajos (log con rotación, candado, timeout) |
+| `common.sh` | Mensajes, ayuda y errores de invocación de los scripts (`usage`, `usage_error`), detección de plataforma, intérprete Python, el arranque común de los trabajos (log con rotación, candado, timeout), los temporales que borra un único manejador de salida (`brain_mktemp`) y el paso de un clon del vendor a su commit fijado (`sync_vendor_clone`) |
 | `python3.sh` | Elección del intérprete (`python3`, `py -3`, `python`) en modo UTF-8 |
 
 Los trabajos programados salen de una única tabla en `scripts/schedule.sh` (nombre, clave del horario, días), de la

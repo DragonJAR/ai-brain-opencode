@@ -167,7 +167,8 @@ edited stay.
 | `ya existe una tarea ajena` / `launch agent ajeno` | Another vault has the same folder name; rename one |
 
 More: platform status and limits in [docs/COMPAT.md](docs/COMPAT.md), changes in [CHANGELOG.md](CHANGELOG.md).
-Windows is covered by simulated tests only; real-hardware reports are welcome.
+On Windows the suite runs in CI on a GitHub runner (non-blocking until it passes reliably) and has not been checked
+on users' machines yet; reports are welcome.
 
 ## License
 

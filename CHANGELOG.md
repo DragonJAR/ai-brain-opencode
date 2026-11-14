@@ -15,6 +15,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   para probar otro commit del starter.
 
 ### Corregido
+- **`uninstall.sh --purge-clones` borraba trabajo sin publicar:** un clon con el árbol limpio se daba por intacto
+  aunque tuviera commits propios (en una rama o con HEAD suelto). Ahora solo se borra si HEAD está en el commit
+  fijado o en una rama remota y ninguna rama local va por delante del remoto.
+- **Desinstalación en Windows:** `shutil.rmtree` se detenía en los objetos de git, que Windows marca de solo
+  lectura, y `--purge-clones` fallaba. `ownership.rmtree` quita esa marca y reintenta; lo usan la desinstalación y
+  `wire.py`.
 - **Temporales huérfanos:** `schedule.sh` corre con `set -e` y cinco de sus temporales no tenían `trap`: si el
   script abortaba a medias quedaban en `TMPDIR`, y cada `trap EXIT` reemplazaba al anterior. Ahora `brain_mktemp` y
   un solo manejador de salida en `scripts/lib/common.sh` borran los temporales y el candado de los trabajos.
@@ -127,7 +133,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **`install.sh --update [vault]`:** actualiza el checkout del paquete con `git pull --ff-only` solo si su remoto
   `origin` es `https://github.com/DragonJAR/ai-brain-opencode` (https con o sin `.git`, o `git@github.com:…`) y la
   rama lo sigue; rechaza otro remoto, cambios locales o HEAD suelto sin tocar nada. Con un vault, después lo
-  re-cablea como `--wire`. El trabajo semanal `update-brain` sigue actualizando solo el starter y humanizer. El
+  re-cablea como `--wire`. El trabajo semanal `update-brain` solo mantiene el starter y humanizer en los commits
+  que fija el paquete. El
   control de datos personales trata esa URL (y la forma SSH `git@host:`) como atribución publicada.
 - `tests/run.sh` descubre también `tests/test-*.mjs`; regresiones para la salida UTF-8 de `/audit`, el bus de
   `notify-send`, la limpieza de `AGENTS.md` y el aviso falso de symlink al reinstalar.
@@ -139,8 +146,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   al re-cablear. `AGENTS.md` usa la misma adaptación.
 - **Sin sugerir el `bootstrap.sh` del vendor:** las copias adaptadas ya no proponen correr
   `bootstrap.sh` (instala Homebrew y Claude Code y escribe en `~/.claude`); proponen
-  `bash scripts/jobs/update-brain.sh`, que trae el starter y re-cablea. Las copias sin tocar se refrescan al
-  re-cablear.
+  `bash scripts/jobs/update-brain.sh`, que deja el starter en el commit fijado y re-cablea. Las copias sin tocar se
+  refrescan al re-cablear.
 - **Ayuda y flags iguales en todos los scripts:** `install.sh`, `uninstall.sh`, `scripts/schedule.sh`,
   `scripts/verify.sh` y `scripts/check-personal-data.sh` usan la misma `usage()` de `scripts/lib/common.sh`:
   `-h`/`--help` imprime la ayuda y sale con 0; una flag desconocida o un argumento de más o de menos sale con 2 y

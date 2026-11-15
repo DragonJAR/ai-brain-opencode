@@ -429,31 +429,66 @@ def put_tree(data, vault, rel, src):
 
 
 def ensure_gitignore(data, vault):
-    """Create .gitignore, or append the package lines an existing one lacks."""
+    """Create .gitignore, or append the package lines an existing one lacks.
+
+    Returns (reason or None, pending or None). The file is not touched until
+    the caller has saved the manifest: a failed save must not leave package
+    lines that uninstall cannot attribute.
+    """
     target = safe_target(vault, ".gitignore")
     if target.is_symlink() or (target.exists() and not target.is_file()):
-        return "symlink o ruta no regular preservada: .gitignore"
+        return "symlink o ruta no regular preservada: .gitignore", None
     if not target.exists():
-        target.write_text("\n".join(GITIGNORE_LINES) + "\n", encoding="utf-8")
-        data["files"][".gitignore"] = file_info(target)
-        print("  + .gitignore")
-        return None
+        text = "\n".join(GITIGNORE_LINES) + "\n"
+        temp = target.with_name(".gitignore.tmp." + str(os.getpid()))
+        temp.write_text(text, encoding="utf-8")
+        data["files"][".gitignore"] = file_info(temp)
+
+        def apply_new(temp=temp, target=target):
+            os.replace(temp, target)
+
+        def drop_new(temp=temp):
+            try:
+                temp.unlink()
+            except FileNotFoundError:
+                pass
+
+        return None, ("  + .gitignore", apply_new, drop_new)
     text = target.read_text(encoding="utf-8")
     present = {line.strip() for line in text.splitlines()}
     missing = [line for line in GITIGNORE_LINES if line not in present]
     if not missing:
-        return None
+        return None, None
     try:
         owned = data["files"].get(".gitignore") == file_info(target)
     except ManifestError:
         owned = False
     prefix = "" if not text or text.endswith("\n") else "\n"
-    with open(target, "a", encoding="utf-8") as handle:
-        handle.write(prefix + "\n".join(missing) + "\n")
+    suffix = prefix + "\n".join(missing) + "\n"
+    # Probe only the appended bytes. Rewriting the whole file through text mode
+    # would turn an existing CRLF line into LF and change bytes uninstall hashed.
+    probe = target.with_name(".gitignore.tmp." + str(os.getpid()))
+    try:
+        probe.write_text(suffix, encoding="utf-8")
+        suffix_raw = probe.read_bytes()
+    finally:
+        try:
+            probe.unlink()
+        except FileNotFoundError:
+            pass
+    raw = target.read_bytes() + suffix_raw
     if owned:
-        data["files"][".gitignore"] = file_info(target)
-    print("  + .gitignore completado (%d líneas del paquete)" % len(missing))
-    return None
+        st = target.stat()
+        data["files"][".gitignore"] = {
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "mode": stat.S_IMODE(st.st_mode),
+            "nlink": st.st_nlink,
+        }
+
+    def apply_append(target=target, raw=raw):
+        target.write_bytes(raw)
+
+    return None, ("  + .gitignore completado (%d líneas del paquete)" % len(missing), apply_append, None)
 
 
 def rmtree(path):
@@ -583,7 +618,7 @@ def read_opencode_config(vault):
 
 
 def configure(data, vault, with_mcp):
-    """Add the package entries to opencode.json; returns created|updated|unchanged."""
+    """Add the package entries. Returns (status, pending); pending is (path, text) or None."""
     path, config = read_opencode_config(vault)
     created = config is None
     if created:
@@ -612,11 +647,13 @@ def configure(data, vault, with_mcp):
                 data["config"][MCP_RECORD_PREFIX + name] = servers[name]
                 changed = True
     if not changed:
-        return "unchanged"
+        return "unchanged", None
     if created:
         data["config"][CONFIG_CREATED] = True
-    path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    return "created" if created else "updated"
+    # The caller saves the manifest before this text is written. Otherwise a
+    # failed save leaves MCP entries and skill rules that uninstall cannot see.
+    text = json.dumps(config, indent=2, ensure_ascii=False) + "\n"
+    return ("created" if created else "updated"), (path, text)
 
 
 def unconfigure(data, vault, dry_run, gone):
@@ -757,6 +794,10 @@ def uninstall(manifest, vault, purge, dry_run):
         is_clone = value in VENDOR_CLONES
         if is_clone and (not purge or value in data["clones"]):
             continue
+        # Copy-mode wiring is one directory under a wired parent. Anything else
+        # in the manifest (a user folder whose hash was recorded) stays.
+        if not is_clone and not is_wired(value):
+            continue
         remove_tree(value, "clon del vendor" if is_clone else "árbol copiado",
                     lambda target, expected=expected: (target.is_dir() and not target.is_symlink()
                                                        and tree_hash(target) == expected))
@@ -851,11 +892,19 @@ def dispatch(path, action, argv):
             save(path, data)
         print(managed)
     elif action == "ensure-gitignore":
-        reason = ensure_gitignore(data, argv[0])
+        reason, pending = ensure_gitignore(data, argv[0])
         if reason is not None:
             warn(reason)
             return PRESERVED
-        save(path, data)
+        try:
+            save(path, data)
+            if pending is not None:
+                pending[1]()
+                print(pending[0])
+        except BaseException:
+            if pending is not None and pending[2] is not None:
+                pending[2]()
+            raise
     elif action == "owned-paths":
         for rel in owned_paths(data):
             sys.stdout.write(rel + "\0")
@@ -880,12 +929,13 @@ def dispatch(path, action, argv):
             save(path, data)
     elif action == "configure":
         try:
-            status = configure(data, argv[0], argv[1] == "1")
+            status, pending = configure(data, argv[0], argv[1] == "1")
         except ConfigSkipped as skipped:
             warn(str(skipped))
             return PRESERVED
-        if status != "unchanged":
+        if pending is not None:
             save(path, data)
+            pending[0].write_text(pending[1], encoding="utf-8")
         print(status)
     elif action == "agent-matches":
         entry = data["launch_agents"].get(argv[0])

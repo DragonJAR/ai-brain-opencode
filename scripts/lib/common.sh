@@ -274,9 +274,17 @@ def on_signal(signum, frame):
 
 signal.signal(signal.SIGTERM, on_signal)
 try:
+    signal.signal(signal.SIGINT, on_signal)
+except (ValueError, OSError):
+    pass
+try:
     raise SystemExit(child.wait(timeout=seconds))
 except subprocess.TimeoutExpired:
     kill_tree()
     child.wait()
-    raise SystemExit(124)' "$mode" "$seconds" "$@"
+    raise SystemExit(124)
+except KeyboardInterrupt:
+    kill_tree()
+    child.wait()
+    raise SystemExit(130)' "$mode" "$seconds" "$@"
 }

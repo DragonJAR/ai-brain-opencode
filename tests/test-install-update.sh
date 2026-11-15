@@ -52,7 +52,9 @@ set_origin() { "$REAL_GIT" -C "$COPY" remote set-url origin "$1"; }
 # 1. The official remote, in every accepted spelling, is pulled with --ff-only.
 for url in https://github.com/DragonJAR/ai-brain-opencode.git https://github.com/DragonJAR/ai-brain-opencode \
            https://github.com/DragonJAR/ai-brain-opencode/ git@github.com:DragonJAR/ai-brain-opencode.git \
-           git@github.com:DragonJAR/ai-brain-opencode; do
+           git@github.com:DragonJAR/ai-brain-opencode \
+           ssh://git@github.com/DragonJAR/ai-brain-opencode.git \
+           ssh://git@github.com/DragonJAR/ai-brain-opencode; do
   set_origin "$url"
   run_update || fail "--update refused the official remote $url: $(cat "$TMP_ROOT/err")"
   pulled || fail "--update did not run git pull --ff-only for $url"

@@ -64,6 +64,7 @@ package_origin_ok() {
   url="${url%.git}"
   case "$url" in
     https://*) url="${url#https://}" ;;
+    ssh://git@github.com/*) url="github.com/${url#ssh://git@github.com/}" ;;
     git@github.com:*) url="github.com/${url#git@github.com:}" ;;
     *) return 1 ;;
   esac
@@ -255,6 +256,9 @@ owner_manifest init "$VERSION" || die "el registro de propiedad existe pero no e
 ensure_vault_dir() {
   local rel="$1" current="$VAULT" part
   local -a parts=()
+  rel="${rel#/}"
+  rel="${rel%/}"
+  [ -n "$rel" ] || return 0
   IFS='/' read -r -a parts <<< "$rel"
   for part in "${parts[@]}"; do
     current="$current/$part"

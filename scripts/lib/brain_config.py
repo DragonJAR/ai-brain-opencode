@@ -219,6 +219,8 @@ def main(argv):
         for warning in warnings:
             print("  ! " + warning, file=sys.stderr)
         if action == "get":
+            if not args:
+                raise ConfigError("get requiere al menos una clave")
             for key in args:
                 print(render(lookup(config, key)))
         elif action == "list":

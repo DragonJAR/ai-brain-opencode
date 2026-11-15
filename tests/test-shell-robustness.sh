@@ -112,18 +112,31 @@ bash -c ". '$PKG/scripts/lib/common.sh' && run_with_timeout 1" >/dev/null 2>&1 &
 bash -c "unset PY3; . '$PKG/scripts/lib/common.sh'; run_python -c 'import sys; sys.exit(0)'" >/dev/null 2>&1 \
   || fail "run_python failed when PY3 was unset before invocation"
 
-# 10. brain_config.py seed/list require argument with clear error message.
+# 10. brain_config.py seed/list/get require argument with clear error message.
 cfg_err="$(python3 "$PKG/scripts/lib/brain_config.py" "$TMP_ROOT/dummy.json" seed 2>&1 || true)"
 echo "$cfg_err" | grep -Fq 'seed requiere el nombre del vault' \
   || fail "brain_config seed without vault name did not emit clear message (got: $cfg_err)"
 cfg_err="$(python3 "$PKG/scripts/lib/brain_config.py" "$TMP_ROOT/dummy.json" list 2>&1 || true)"
 echo "$cfg_err" | grep -Fq 'list requiere una clave' \
   || fail "brain_config list without key did not emit clear message (got: $cfg_err)"
+cfg_err="$(python3 "$PKG/scripts/lib/brain_config.py" "$TMP_ROOT/dummy.json" get 2>&1 || true)"
+echo "$cfg_err" | grep -Fq 'get requiere al menos una clave' \
+  || fail "brain_config get without key did not emit clear message (got: $cfg_err)"
 
 # 11. wire.py rejects empty --only flag.
 wire_err="$(python3 "$PKG/scripts/lib/wire.py" "$TMP_ROOT/dummy-vault" --only "" 2>&1 || true)"
 echo "$wire_err" | grep -Fq 'uso: python3 wire.py' \
   || fail "wire.py accepted empty --only without usage error (got: $wire_err)"
+
+# 12. run_with_timeout terminates child tree and exits 130 on SIGINT.
+sig_rc="$(python3 -c '
+import os, signal, subprocess, time
+p = subprocess.Popen(["bash", "-c", ". \"'"$PKG"'/scripts/lib/common.sh\"; run_with_timeout 10 sleep 30"], preexec_fn=os.setsid)
+time.sleep(0.3)
+os.killpg(p.pid, signal.SIGINT)
+raise SystemExit(p.wait())
+' 2>/dev/null || echo $?)"
+[ "$sig_rc" = 130 ] || fail "run_with_timeout on SIGINT exited with $sig_rc (expected 130)"
 
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: shell robustness had %s failures\n' "$failures" >&2

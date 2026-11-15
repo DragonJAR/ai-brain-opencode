@@ -116,8 +116,8 @@ for_owned_agents() {
   rm -f "$list"
 }
 
-hm() { printf '%s\n' "$1" | cut -d: -f1; }
-pm() { printf '%s\n' "$1" | cut -d: -f2 | sed 's/^0//'; }
+hm() { printf '%s\n' "${1%%:*}"; }
+pm() { local m="${1#*:}"; printf '%d\n' "$((10#$m))"; }
 
 # "1-5" -> "1 2 3 4 5"; "0" -> "0"; "*" -> "" (todos los días).
 expand_days() {
@@ -517,9 +517,11 @@ fi
 
 if [ "$OS" = "Darwin" ]; then
   launchd_calendar() {
-    local time="$1" days="$2" day entry="" count=0
+    local time="$1" days="$2" day entry="" count=0 h m
+    h="$((10#${time%%:*}))"
+    m="$((10#${time#*:}))"
     for day in ${days:-all}; do
-      entry="$entry<dict><key>Hour</key><integer>$((10#$(hm "$time")))</integer><key>Minute</key><integer>$((10#$(printf '%s' "$time" | cut -d: -f2)))</integer>"
+      entry="$entry<dict><key>Hour</key><integer>$h</integer><key>Minute</key><integer>$m</integer>"
       [ "$day" = all ] || entry="$entry<key>Weekday</key><integer>$day</integer>"
       entry="$entry</dict>"
       count=$((count + 1))

@@ -128,15 +128,34 @@ wire_err="$(python3 "$PKG/scripts/lib/wire.py" "$TMP_ROOT/dummy-vault" --only ""
 echo "$wire_err" | grep -Fq 'uso: python3 wire.py' \
   || fail "wire.py accepted empty --only without usage error (got: $wire_err)"
 
-# 12. run_with_timeout terminates child tree and exits 130 on SIGINT.
-sig_rc="$(python3 -c '
+# 12. On SIGINT run_with_timeout kills the child tree and exits 130. POSIX only:
+#     Windows has no process groups to signal (that path uses taskkill).
+case "${OSTYPE:-}" in
+  msys*|cygwin*) ;;
+  *)
+    sig_out="$(PKG="$PKG" PIDFILE="$TMP_ROOT/sigint.pid" python3 -c '
 import os, signal, subprocess, time
-p = subprocess.Popen(["bash", "-c", ". \"'"$PKG"'/scripts/lib/common.sh\"; run_with_timeout 10 sleep 30"], preexec_fn=os.setsid)
-time.sleep(0.3)
+pidfile = os.environ["PIDFILE"]
+cmd = ". \"$PKG/scripts/lib/common.sh\"; run_with_timeout 30 bash -c \"echo \\$\\$ > \\\"$PIDFILE\\\"; exec sleep 30\""
+p = subprocess.Popen(["bash", "-c", cmd], start_new_session=True)
+deadline = time.time() + 20
+while time.time() < deadline and not (os.path.exists(pidfile) and open(pidfile).read().strip()):
+    time.sleep(0.05)
+time.sleep(0.5)  # the child starts before the handler is installed
 os.killpg(p.pid, signal.SIGINT)
-raise SystemExit(p.wait())
-' 2>/dev/null || echo $?)"
-[ "$sig_rc" = 130 ] || fail "run_with_timeout on SIGINT exited with $sig_rc (expected 130)"
+rc = p.wait()
+child = int(open(pidfile).read())
+time.sleep(0.2)
+try:
+    os.kill(child, 0)
+    alive = "alive"
+except OSError:
+    alive = "gone"
+print(rc, alive)
+' 2>&1)"
+    [ "$sig_out" = "130 gone" ] || fail "run_with_timeout on SIGINT: got '$sig_out' (expected '130 gone')"
+    ;;
+esac
 
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: shell robustness had %s failures\n' "$failures" >&2

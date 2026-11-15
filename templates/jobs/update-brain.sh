@@ -13,7 +13,6 @@ R="$VAULT/.opencode/skills/ai-brain-starter"
 
 while IFS=$'\t' read -r rel url commit; do
   [ -n "$rel" ] || continue
-  commit="${commit%$'\r'}"
   rc=0
   sync_vendor_clone "$VAULT/$rel" "$url" "$commit" || rc=$?
   case "$rc" in

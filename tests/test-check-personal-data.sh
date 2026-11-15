@@ -104,6 +104,17 @@ if gate "$P" "$TMP_ROOT/terms-lf.txt"; then
   fail "an actual email address at github.com was not flagged"
 fi
 
+# Only the git user is exempt: a person's address before ":" or "/" is still a leak.
+for leak in "write to %s@%s: thanks" "clone ssh://%s@%s/repo"; do
+  P="$TMP_ROOT/pkg-ssh-person"
+  clean_pkg "$P"
+  # shellcheck disable=SC2059
+  printf "$leak\n" dev.person github.com > "$P/README.md"
+  if gate "$P" "$TMP_ROOT/terms-lf.txt"; then
+    fail "a personal address shaped like an SSH remote was not flagged: $leak"
+  fi
+done
+
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: personal data gate had %s failures\n' "$failures" >&2
   exit 1

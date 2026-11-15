@@ -111,6 +111,17 @@ try {
   hooks.prompt[0](meetingWithQuestion)
   ok(meetingWithQuestion.prompt.text.includes("Disparador de reunión detectado"), "afirmación de reunión seguida de pregunta sí dispara el flujo")
 
+  for (const [text, expected] of [
+    ["Tuve una reunión con Pedro, la anotas?", true],
+    ["Hola, ¿terminó la reunión?", false],
+    ["Qué pasó cuando terminó la reunión?", false],
+  ]) {
+    const event = { prompt: { text } }
+    hooks.prompt[0](event)
+    const fired = event.prompt.text.includes("Disparador de reunión detectado")
+    ok(fired === expected, `${JSON.stringify(text)} ${expected ? "debe" : "no debe"} disparar la reunión`)
+  }
+
   const plain = { prompt: { text: "arregla el bug del parser" } }
   hooks.prompt[0](plain)
   ok(plain.prompt.text === "arregla el bug del parser", "un prompt normal no se modifica")
@@ -282,6 +293,17 @@ try {
   const enMeetingStatement = { prompt: { text: "just had a meeting with the team. Can you summarize it?" } }
   enHooks.prompt[0](enMeetingStatement)
   ok(enMeetingStatement.prompt.text.includes("Meeting trigger detected"), "English statement followed by question triggers")
+
+  for (const [text, expected] of [
+    ["Just had a meeting with the team, can you summarize it?", true],
+    ["just had a call with Bob, notes please?", true],
+    ["Was the call done, Bob?", false],
+  ]) {
+    const event = { prompt: { text } }
+    enHooks.prompt[0](event)
+    const fired = event.prompt.text.includes("Meeting trigger detected")
+    ok(fired === expected, `${JSON.stringify(text)} ${expected ? "must" : "must not"} trigger the meeting flow`)
+  }
 
   // 5b. Independent session hook degradation: rejection of 'context' does not disable 'prompt'.
   const partHooks = { context: [], prompt: [] }

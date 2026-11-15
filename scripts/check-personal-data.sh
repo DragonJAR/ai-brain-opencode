@@ -11,7 +11,8 @@
 # Un código >=2 es un error: el paquete no se declara limpio.
 #
 # No se escanean directorios que no se distribuyen: .atl/, odd/, __pycache__/.
-# Los correos de ejemplo (example.com/org/net y *.invalid) no son datos del operador, ni un remoto SSH (git@host:).
+# Los correos de ejemplo (example.com/org/net y *.invalid) no son datos del operador, ni un remoto SSH del usuario git
+# (git@host:, git@host/, ssh://git@host/); cualquier otro usuario sí se marca.
 # La atribución publicada de README.md y README.es.md no entra en los nombres propios.
 # Los binarios se leen como texto (grep -a): un correo dentro de un PNG también es una fuga.
 set -uo pipefail
@@ -64,9 +65,7 @@ keep_structural() {
     scrubbed="$(printf '%s\n' "$line" | sed -E \
       -e 's/[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)*example\.(com|org|net)//g' \
       -e 's/[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)*[A-Za-z0-9-]+\.invalid//g' \
-      -e 's#ssh://[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+##g' \
-      -e 's#[A-Za-z0-9._-]+@(github|gitlab|bitbucket)\.[A-Za-z0-9.-]+[:/]##g' \
-      -e 's/(^|[^A-Za-z0-9._%+-])git@[A-Za-z0-9.-]+:/\1/g')"
+      -e 's#(^|[^A-Za-z0-9._%+-])(ssh://)?git@[A-Za-z0-9.-]+[:/]#\1#g')"
     if printf '%s\n' "$scrubbed" | grep -qE "$STRUCT_RE"; then
       printf '%s\n' "$line"
     fi

@@ -29,14 +29,20 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **Tareas retiradas en Windows:** una tarea de `schtasks` que el paquete ya no programa quedaba activa y huérfana;
   `schedule.sh` la borra como ya hacían launchd y cron. `schedule.sh` acepta `--dry-run --remove` en cualquier
   orden, lee `crontab -l` con locale neutro y descarta el `\r` de las horas leídas en Git Bash.
+- **`install.sh --update`** acepta el remoto oficial escrito como `ssh://git@github.com/...`.
+- **Insights semanal:** un Ctrl+C (SIGINT) durante el trabajo ya no deja `opencode` corriendo huérfano; se corta el
+  árbol de procesos como al agotarse el tiempo.
+- **`check-personal-data.sh`:** solo exime los remotos SSH del usuario `git`; una dirección personal con forma de
+  remoto (`<usuario>@github.com:` o `ssh://<usuario>@host/`) vuelve a marcarse.
 - **`snapshot_paths`:** una ruta con salto de línea, retorno de carro o byte nulo se descarta con aviso.
 - **`uninstall.sh`:** también se niega, sin tocar nada, si `scripts/lib`, `.opencode/commands` o `⚙️ Meta/scripts`
   son symlinks.
 - **`/audit`:** resuelve `[[./Nota]]`, ignora los enlaces de solo ancla, da por vacío un `type:` `null`, `~` o
   `None` (sin importar mayúsculas), acepta el cierre `...` del frontmatter y no confunde un separador `----`.
 - **Plugin `brain-vault`:** el contexto incluye tus `accountability`; reconoce más despedidas (`chau`, `hasta
-  luego`, `see you tomorrow`…) y no dispara el flujo de reunión con una pregunta (`¿cuándo terminó la reunión?`);
-  los hooks de contexto y de prompt se degradan por separado; las notas nuevas creadas con `patch` y ruta entre
+  luego`, `see you tomorrow`…) y no dispara el flujo de reunión con una pregunta (`¿cuándo terminó la reunión?`,
+  `What happened after the meeting ended?`), pero sí con una afirmación seguida de un pedido (`tuve una reunión con
+  Pedro, la anotas?`); los hooks de contexto y de prompt se degradan por separado; las notas nuevas creadas con `patch` y ruta entre
   comillas también reciben frontmatter, sin cambiar sus finales de línea.
 - **Desinstalación en Windows:** `shutil.rmtree` se detenía en los objetos de git, que Windows marca de solo
   lectura, y `--purge-clones` fallaba. `ownership.rmtree` quita esa marca y reintenta; lo usan la desinstalación y

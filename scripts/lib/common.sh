@@ -272,19 +272,12 @@ def on_signal(signum, frame):
     kill_tree()
     raise SystemExit(128 + signum)
 
-signal.signal(signal.SIGTERM, on_signal)
-try:
-    signal.signal(signal.SIGINT, on_signal)
-except (ValueError, OSError):
-    pass
+for sig in (signal.SIGTERM, signal.SIGINT):
+    signal.signal(sig, on_signal)
 try:
     raise SystemExit(child.wait(timeout=seconds))
 except subprocess.TimeoutExpired:
     kill_tree()
     child.wait()
-    raise SystemExit(124)
-except KeyboardInterrupt:
-    kill_tree()
-    child.wait()
-    raise SystemExit(130)' "$mode" "$seconds" "$@"
+    raise SystemExit(124)' "$mode" "$seconds" "$@"
 }

@@ -231,14 +231,21 @@ export default {
       cfg.language === "es"
         ? /\b(acabo de tener una (?:reuni[oó]n|llamada|junta)|tuve una (?:reuni[oó]n|llamada|junta)|termin[oó] la (?:reuni[oó]n|llamada|junta)|(?:reuni[oó]n|llamada|junta) terminada)\b/i
         : /\b(just had a (?:meeting|call)|(?:meeting|call) (?:is )?(?:done|just ended)|(?:meeting|call) (?:ended|finished))\b/i
-    const isMeetingQuestion = (text) => {
-      const trimmed = text.trim()
-      const questions = trimmed.match(/(?:^|[.!?…\n¿])[^.!?…\n¿]*\?/g) || []
-      if (questions.some((q) => meetingWords.test(q))) return true
-      const invertedQuestions = trimmed.match(/¿[^.!?…\n]*/g) || []
-      if (invertedQuestions.some((q) => meetingWords.test(q))) return true
-      return false
-    }
+    // The meeting phrase is a question when its sentence opens with an interrogative
+    // and ends in "?", or when its own clause opens with "¿" or ends in "?". A request
+    // after a comma ("just had a call, notes please?") keeps the statement a trigger.
+    const questionStart =
+      /^¿?\s*(?:cu[aá]ndo|d[oó]nde|c[oó]mo|por qu[eé]|qui[eé]n|qu[eé]|cu[aá]l(?:es)?|did|does|do|is|was|were|has|have|had|can|could|will|would|when|where|why|how|what|who|which)(?![\p{L}\p{N}])/iu
+    const isMeetingQuestion = (text) =>
+      (text.match(/[^.!?…\n]+[.!?…]*/g) || []).some((part) => {
+        const sentence = part.trim()
+        if (!meetingWords.test(sentence)) return false
+        if (sentence.endsWith("?") && questionStart.test(sentence)) return true
+        return (sentence.match(/¿[^,;¿]*|[^,;¿]+/g) || []).some((clause) => {
+          const c = clause.trim()
+          return meetingWords.test(c) && (c.startsWith("¿") || c.endsWith("?"))
+        })
+      })
 
     const isEn = cfg.language === "en"
 

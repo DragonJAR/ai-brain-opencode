@@ -36,6 +36,7 @@ ai_brain_mock_crontab "$BIN"
 ai_brain_mock_git "$BIN"
 ai_brain_mock_opencode "$BIN"
 ai_brain_mock_windows "$BIN"
+ai_brain_mock_plutil "$BIN"
 export MOCK_UNAME MOCK_VAULT MOCK_GIT_CALLS MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES
 export PATH="$BIN:$PATH"
 export TMPDIR="$TMP_ROOT"
@@ -82,12 +83,10 @@ for job in "$PKG"/templates/jobs/*.sh; do
 done
 [ "$(wc -l < "$TMP_ROOT/cron.txt" | tr -d ' ')" = "$(find "$PKG/templates/jobs" -name '*.sh' | wc -l | tr -d ' ')" ] \
   || fail "cron schedules a job that has no script in templates/jobs"
-if [ "$(command uname -s)" = "Darwin" ] && command -v plutil >/dev/null; then
-  MOCK_UNAME=Darwin bash "$PKG/scripts/schedule.sh" "$VAULT" --dry-run > "$TMP_ROOT/launchd.txt"
-  for job in "$PKG"/templates/jobs/*.sh; do
-    grep -Eq "\.$(basename "$job" .sh)\$" "$TMP_ROOT/launchd.txt" || fail "launchd does not schedule $(basename "$job" .sh)"
-  done
-fi
+MOCK_UNAME=Darwin bash "$PKG/scripts/schedule.sh" "$VAULT" --dry-run > "$TMP_ROOT/launchd.txt"
+for job in "$PKG"/templates/jobs/*.sh; do
+  grep -Eq "\.$(basename "$job" .sh)\$" "$TMP_ROOT/launchd.txt" || fail "launchd does not schedule $(basename "$job" .sh)"
+done
 
 # 5. Scheduled jobs carry a PATH: cron and launchd start with a minimal one
 #    where opencode is not found.

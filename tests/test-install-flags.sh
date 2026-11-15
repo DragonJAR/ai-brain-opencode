@@ -49,7 +49,7 @@ if ! MOCK_GIT_CLEAN=1 bash "$PKG/install.sh" "$VAULT_CFG" --config "$CFG" --yes 
   fail "--config --yes install failed"
   cat "$TMP_ROOT/cfg.txt" >&2
 fi
-python3 - "$VAULT_CFG/⚙️ Meta/brain-config.json" <<'PY'
+if ! python3 - "$VAULT_CFG/⚙️ Meta/brain-config.json" <<'PY'
 import json, sys
 cfg = json.load(open(sys.argv[1], encoding="utf-8"))
 assert cfg["language"] == "en", cfg
@@ -57,7 +57,9 @@ assert cfg["journal"]["time"] == "07:15", cfg
 assert cfg["schedule"]["insights_time"] == "22:30", cfg
 assert cfg["habits"] == ["agua"], cfg
 PY
-[ $? -eq 0 ] || fail "seeded config does not match --config values"
+then
+  fail "seeded config does not match --config values"
+fi
 
 # Clean-tree path: the base commit must be skipped, not attempted.
 if grep -Eq ' commit -q' "$MOCK_GIT_CALLS"; then

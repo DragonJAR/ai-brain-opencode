@@ -9,7 +9,7 @@ PKG="$(cd "$TEST_DIR/.." && pwd)"
 . "$TEST_DIR/lib/mocks.sh"
 
 TMP_ROOT="$(ai_brain_test_root uninstall-dry-schedule)"
-trap "cp \"\$TMP_ROOT/uninstall-dry.txt\" /tmp/cs-peek/ 2>/dev/null; rm -rf \"\$TMP_ROOT\"" EXIT
+trap 'rm -rf "$TMP_ROOT"' EXIT
 
 failures=0
 fail() {

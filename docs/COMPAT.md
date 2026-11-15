@@ -33,7 +33,7 @@ mapea cada mecanismo, para saber qué está portado, qué se sustituyó y qué n
 
 | Hook/script CC | Sustituto |
 |---|---|
-| auto-update cada ~6 días al abrir sesión | ninguna actualización automática: el paquete se actualiza a mano con `install.sh --update <vault>`, solo desde `https://github.com/DragonJAR/ai-brain-opencode`, y trae consigo los commits del starter y humanizer que fija `scripts/lib/vault_layout.py`; el trabajo semanal `update-brain.sh` solo mantiene los clones en esos commits y re-cablea |
+| auto-update cada ~6 días al abrir sesión | ninguna actualización automática: el paquete se actualiza a mano con `install.sh --update [vault]`, solo desde `https://github.com/DragonJAR/ai-brain-opencode`, y trae consigo los commits del starter y humanizer que fija `scripts/lib/vault_layout.py`; el trabajo semanal `update-brain.sh` solo mantiene los clones en esos commits y re-cablea |
 | insights semanal/mensual (cron) | trabajo programado semanal con `opencode run --auto` (y `--archived` si existe) y gate por número de entradas; invoca `--command insights` si la CLI lo ofrece y, si no (OpenCode v2 no lo tiene y no interpreta `/insights` dentro del mensaje), nombra la skill `insights` |
 | daily job (ramas, worktrees, disco) | trabajo programado diario: índice del diario + snapshot git |
 | session-end-hook.sh (cascade) | protocolo de sesión en AGENTS.md + hook de prompt |

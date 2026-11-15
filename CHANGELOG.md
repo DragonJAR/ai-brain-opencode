@@ -15,6 +15,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
   para probar otro commit del starter.
 
 ### Corregido
+- **Cobertura y robustez de pruebas:** se añadió prueba determinista de descarga y eliminación real de `launchd`
+  (`schedule.sh <vault> --remove` en macOS, verificando descarga con `launchctl bootout`, eliminación de plists sin
+  modificar, preservación de plists modificados por el usuario y actualización del manifiesto); se incluyó mock de
+  `plutil` en `test-audit-regressions.sh` para no saltar el chequeo de launchd en CI Linux; se corrigió la rama de fallo
+  en la validación de configuración de `test-install-flags.sh`; se eliminó un comando de depuración residual en el trap de
+  `test-uninstall-dry-run-schedule.sh`; y se alineó la mención de `install.sh --update [vault]` en `docs/COMPAT.md`.
 - **`uninstall.sh --purge-clones` borraba trabajo sin publicar:** un clon con el árbol limpio se daba por intacto
   aunque tuviera commits propios (en una rama o con HEAD suelto). Ahora solo se borra si HEAD está en el commit
   fijado o en una rama remota y ninguna rama local va por delante del remoto.

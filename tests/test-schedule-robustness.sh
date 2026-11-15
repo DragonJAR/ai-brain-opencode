@@ -136,6 +136,51 @@ MOCK_UNAME=MINGW64_NT-10.0 bash "$PKG/scripts/schedule.sh" "$WIN_VAULT" --dry-ru
 ! grep -qi 'argumento inesperado' "$TMP_ROOT/win-dry-rev.txt" \
   || fail "schedule.sh --dry-run --remove gave unexpected argument error"
 
+# 8. launchd: --remove unloads and deletes unmodified plists, preserves user-modified plists, and updates manifest.
+MAC_REM_VAULT="$TMP_ROOT/mac-rem-vault"
+new_vault "$MAC_REM_VAULT"
+for j in journal-reminder insights-weekly daily-maintenance update-brain; do
+  touch "$MAC_REM_VAULT/scripts/jobs/$j.sh"
+done
+HOME="$MAC_HOME" MOCK_UNAME=Darwin bash "$PKG/scripts/schedule.sh" "$MAC_REM_VAULT" \
+  > "$TMP_ROOT/mac-rem-install.txt" 2>&1 || fail "launchd install for remove test failed"
+
+AGENTS_DIR="$MAC_HOME/Library/LaunchAgents"
+USER_MOD_PLIST="$AGENTS_DIR/com.ai-brain.mac-rem-vault.journal-reminder.plist"
+[ -f "$USER_MOD_PLIST" ] || fail "launch agent was not created: $USER_MOD_PLIST"
+printf '<!-- user edit -->\n' >> "$USER_MOD_PLIST"
+
+: > "$MOCK_LAUNCHCTL_CALLS"
+HOME="$MAC_HOME" MOCK_UNAME=Darwin bash "$PKG/scripts/schedule.sh" "$MAC_REM_VAULT" --remove \
+  > "$TMP_ROOT/mac-rem-out.txt" 2>&1 || fail "launchd schedule --remove failed: $(cat "$TMP_ROOT/mac-rem-out.txt")"
+
+grep -Fq 'launch agent modificado o no verificado, preservado:' "$TMP_ROOT/mac-rem-out.txt" \
+  || fail "launchd --remove did not warn about preserved user-modified agent"
+
+[ -f "$USER_MOD_PLIST" ] || fail "launchd --remove deleted user-modified plist"
+
+for j in insights-weekly daily-maintenance update-brain; do
+  plist="$AGENTS_DIR/com.ai-brain.mac-rem-vault.$j.plist"
+  [ ! -f "$plist" ] || fail "launchd --remove did not delete unmodified plist $j"
+  grep -Fq "bootout gui/$(id -u)/com.ai-brain.mac-rem-vault.$j" "$MOCK_LAUNCHCTL_CALLS" \
+    || fail "launchd --remove did not call bootout for $j"
+done
+
+if grep -Fq "bootout gui/$(id -u)/com.ai-brain.mac-rem-vault.journal-reminder" "$MOCK_LAUNCHCTL_CALLS"; then
+  fail "launchd --remove booted out the user-modified agent"
+fi
+
+if ! python3 - "$MAC_REM_VAULT/.opencode/brain-vault-install-manifest.json" <<'PY'
+import json, pathlib, sys
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+agents = manifest.get("launch_agents", {})
+assert len(agents) == 1, f"expected 1 remaining agent in manifest, got {len(agents)}: {agents}"
+assert any("journal-reminder" in k for k in agents), f"user-modified agent missing from manifest: {agents}"
+PY
+then
+  fail "manifest launch_agents was not properly updated after launchd removal"
+fi
+
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: schedule robustness had %s failed assertions\n' "$failures" >&2
   exit 1

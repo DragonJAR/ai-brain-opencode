@@ -103,6 +103,14 @@ try {
   hooks.prompt[0](meetingQuestion2)
   ok(!meetingQuestion2.prompt.text.includes("Disparador de reunión detectado"), "¿Tuve una reunión? es pregunta, no trigger")
 
+  const meetingQuestion3 = { prompt: { text: "terminó la reunión?" } }
+  hooks.prompt[0](meetingQuestion3)
+  ok(!meetingQuestion3.prompt.text.includes("Disparador de reunión detectado"), "terminó la reunión? sin ¿ no dispara el flujo")
+
+  const meetingWithQuestion = { prompt: { text: "acabo de tener una reunión con Pedro. ¿Podrías crear la nota?" } }
+  hooks.prompt[0](meetingWithQuestion)
+  ok(meetingWithQuestion.prompt.text.includes("Disparador de reunión detectado"), "afirmación de reunión seguida de pregunta sí dispara el flujo")
+
   const plain = { prompt: { text: "arregla el bug del parser" } }
   hooks.prompt[0](plain)
   ok(plain.prompt.text === "arregla el bug del parser", "un prompt normal no se modifica")
@@ -263,6 +271,18 @@ try {
     ok(fired === expected, `${JSON.stringify(text)} ${expected ? "debe" : "no debe"} disparar el cierre`)
   }
 
+  const enMeetingQuestion = { prompt: { text: "What happened after the meeting ended?" } }
+  enHooks.prompt[0](enMeetingQuestion)
+  ok(!enMeetingQuestion.prompt.text.includes("Meeting trigger detected"), "English question about meeting does not trigger")
+
+  const enMeetingQuestion2 = { prompt: { text: "the call is done?" } }
+  enHooks.prompt[0](enMeetingQuestion2)
+  ok(!enMeetingQuestion2.prompt.text.includes("Meeting trigger detected"), "English informal question does not trigger")
+
+  const enMeetingStatement = { prompt: { text: "just had a meeting with the team. Can you summarize it?" } }
+  enHooks.prompt[0](enMeetingStatement)
+  ok(enMeetingStatement.prompt.text.includes("Meeting trigger detected"), "English statement followed by question triggers")
+
   // 5b. Independent session hook degradation: rejection of 'context' does not disable 'prompt'.
   const partHooks = { context: [], prompt: [] }
   const partCtx = {
@@ -335,6 +355,9 @@ try {
   const applyPatch = { tool: "apply_patch", input: { patchText: "*** Begin Patch\n*** Add File: 📓 Journals/2026-01-02.md\n+hoy\n*** End Patch" } }
   await hook(applyPatch)
   ok(applyPatch.input.patchText.includes("+type: journal"), "apply_patch (nombre de v1) también recibe frontmatter")
+  const applypatchNoUnderscore = { tool: "applypatch", input: { patchText: "*** Begin Patch\n*** Add File: 📓 Journals/2026-01-03.md\n+hoy\n*** End Patch" } }
+  await hook(applypatchNoUnderscore)
+  ok(applypatchNoUnderscore.input.patchText.includes("+type: journal"), "applypatch (sin guion bajo) también recibe frontmatter")
 
   // 8. edit never creates a file in OpenCode v2 (empty oldString and missing files are rejected): left untouched.
   const editInput = { path: join(vault, "📝 Notes", "no-existe.md"), oldString: "", newString: "# nueva" }

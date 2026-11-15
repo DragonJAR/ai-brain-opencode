@@ -7,7 +7,7 @@ LIB="$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 . "$LIB"
 job_init
 
-INFO="$(brain_config "$CFG" get vault_name journal.time 2>> "$LOG")" || job_fail "no se pudo leer brain-config.json"
+INFO="$(brain_config "$CFG" get vault_name journal.time 2>> "$LOG" | tr -d '\r')" || job_fail "no se pudo leer brain-config.json"
 NAME=$(printf '%s\n' "$INFO" | sed -n '1p')
 TIME_=$(printf '%s\n' "$INFO" | sed -n '2p')
 MESSAGE="Hora del diario ($TIME_). Abre OpenCode en $NAME y escribe /daily-journal"

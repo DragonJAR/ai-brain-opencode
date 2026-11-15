@@ -233,8 +233,10 @@ export default {
         : /\b(just had a (?:meeting|call)|(?:meeting|call) (?:is )?(?:done|just ended)|(?:meeting|call) (?:ended|finished))\b/i
     const isMeetingQuestion = (text) => {
       const trimmed = text.trim()
-      if (/^\s*¿[^.!?…]*\?\s*$/.test(trimmed)) return true
-      if (/^\s*(?:cu[aá]ndo|d[oó]nde|c[oó]mo|por qu[eé]|qui[eé]n|did|is|was|when|where|why|how)\b[^.!?…]*\?\s*$/i.test(trimmed)) return true
+      const questions = trimmed.match(/(?:^|[.!?…\n¿])[^.!?…\n¿]*\?/g) || []
+      if (questions.some((q) => meetingWords.test(q))) return true
+      const invertedQuestions = trimmed.match(/¿[^.!?…\n]*/g) || []
+      if (invertedQuestions.some((q) => meetingWords.test(q))) return true
       return false
     }
 
@@ -345,7 +347,7 @@ export default {
         const input = event?.input
         if (!input || typeof input !== "object") return
         // edit is not handled: in OpenCode v2 it rejects an empty oldString and a missing file, so it never creates a note.
-        if (tool === "patch" || tool === "apply_patch") {
+        if (tool === "patch" || tool === "apply_patch" || tool === "applypatch") {
           if (typeof input.patchText !== "string") return
           const patchText = addFrontmatterToPatch(input.patchText)
           if (patchText !== input.patchText) event.input = { ...input, patchText }

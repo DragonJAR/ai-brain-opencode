@@ -19,9 +19,10 @@ if [ ! -d ".git" ]; then
 fi
 
 # Qué se confirma lo decide snapshot_paths en brain-config.json.
-SNAPSHOT="$(brain_config "$CFG" list snapshot_paths 2>> "$LOG")" || job_fail "no se pudo leer snapshot_paths"
+SNAPSHOT="$(brain_config "$CFG" list snapshot_paths 2>> "$LOG" | tr -d '\r')" || job_fail "no se pudo leer snapshot_paths"
 paths=()
 while IFS= read -r p; do
+  p="$(printf '%s\n' "$p" | tr -d '\r')"
   if [ -n "$p" ]; then paths+=("$p"); fi
 done <<EOF
 $SNAPSHOT

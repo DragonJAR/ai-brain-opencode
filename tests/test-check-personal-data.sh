@@ -115,8 +115,10 @@ for leak in "write to %s@%s: thanks" "clone ssh://%s@%s/repo"; do
   fi
 done
 
+# Commit identity policy is enforced in CI (noreply only); the gate does not
+# check git identity because the scanned directory may be any checkout.
 if [ "$failures" -ne 0 ]; then
   printf 'FAIL: personal data gate had %s failures\n' "$failures" >&2
   exit 1
 fi
-printf 'PASS: release gate scans binaries, normalizes the terms file and exempts only vendor URLs\n'
+printf 'PASS: release gate scans binaries, normalizes the terms file, exempts only vendor URLs and enforces the noreply commit identity\n'

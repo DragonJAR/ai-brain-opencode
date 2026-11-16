@@ -52,7 +52,16 @@ jobs:
         with:
           node-version: "22"
       - name: shellcheck
-        run: shellcheck -S warning install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh templates/jobs/*.sh tests/*.sh tests/lib/*.sh
+        run: shellcheck -S warning install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh templates/jobs/*.sh
+      - name: Commit identity policy (noreply only)
+        run: |
+          bad=$(git log --format='%an <%ae>%n%cn <%ce>' "${{ github.event.before }}..${{ github.sha }}" 2>/dev/null \
+            | grep -viE '^[^<]*<[^<]*@users\.noreply\.github\.com>$' | head -5 || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Commits con identidad de autor fuera de la politica (solo noreply):" >&2
+            echo "$bad" >&2
+            exit 1
+          fi tests/*.sh tests/lib/*.sh
       - name: Python syntax (3.9, the documented minimum)
         run: python3 -m py_compile scripts/lib/*.py scripts/audit.py
       - name: Plugin syntax

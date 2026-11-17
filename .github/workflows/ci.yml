@@ -55,11 +55,12 @@ jobs:
         run: shellcheck -S warning install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh templates/jobs/*.sh
       - name: Commit identity policy (noreply only)
         run: |
-          bad=$(git log --format='%an <%ae>%n%cn <%ce>' "${{ github.event.before }}..${{ github.sha }}" 2>/dev/null \
-            | grep -viE '^[^<]*<[^<]*@users\.noreply\.github\.com>$' | head -5 || true)
+          # Solo el commit punta: no depende de event.before (inutilizable tras
+          # un force-push con fetch-depth=1) ni de rangos que requieren historia.
+          bad=$(git log -1 --format='%an <%ae>%n%cn <%ce>' \
+            | grep -viE '^[^<]*<[^<]*@users\.noreply\.github\.com>$' || true)
           if [ -n "$bad" ]; then
-            echo "::error::Commits con identidad de autor fuera de la politica (solo noreply):" >&2
-            echo "$bad" >&2
+            echo "::error::Commit punta con identidad fuera de la politica (solo noreply): $bad" >&2
             exit 1
           fi tests/*.sh tests/lib/*.sh
       - name: Python syntax (3.9, the documented minimum)

@@ -52,7 +52,7 @@ jobs:
         with:
           node-version: "22"
       - name: shellcheck
-        run: shellcheck -S warning install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh templates/jobs/*.sh
+        run: shellcheck -S warning install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh templates/jobs/*.sh tests/*.sh tests/lib/*.sh
       - name: Commit identity policy (noreply only)
         run: |
           # Solo el commit punta: no depende de event.before (inutilizable tras
@@ -62,7 +62,7 @@ jobs:
           if [ -n "$bad" ]; then
             echo "::error::Commit punta con identidad fuera de la politica (solo noreply): $bad" >&2
             exit 1
-          fi tests/*.sh tests/lib/*.sh
+          fi
       - name: Python syntax (3.9, the documented minimum)
         run: python3 -m py_compile scripts/lib/*.py scripts/audit.py
       - name: Plugin syntax

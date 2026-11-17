@@ -27,6 +27,7 @@ ai_brain_mock_opencode "$BIN"
 MOCK_UNAME=Linux
 MOCK_GIT_REAL="$REAL_GIT"
 export MOCK_UNAME MOCK_GIT_REAL
+ai_brain_mock_python3 "$BIN"
 export PATH="$BIN:/usr/bin:/bin"
 export TMPDIR="$TMP_ROOT" HOME="$TMP_ROOT/userhome" XDG_CONFIG_HOME="$TMP_ROOT/userhome/.config"
 export GIT_CONFIG_NOSYSTEM=1

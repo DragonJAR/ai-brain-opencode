@@ -104,6 +104,7 @@ PY
 
 # 4. verify.sh checks one folder per canonical root; the help names every MCP server.
 mkdir -p "$TMP_ROOT/vbin"
+ai_brain_mock_python3 "$TMP_ROOT/vbin"
 ai_brain_mock_opencode "$TMP_ROOT/vbin"
 (cd "$V" && PATH="$TMP_ROOT/vbin:/usr/bin:/bin:$PATH" bash scripts/verify.sh > "$TMP_ROOT/verify.out" 2>&1) || true
 roots="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import vault_layout as l; print("\n".join(l.roots()))' "$PKG/scripts/lib")"

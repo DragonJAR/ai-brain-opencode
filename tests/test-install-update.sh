@@ -23,6 +23,7 @@ ai_brain_mock_platform "$BIN"
 ai_brain_mock_git "$BIN"
 ai_brain_mock_opencode "$BIN"
 export MOCK_UNAME=Linux MOCK_GIT_REAL="$REAL_GIT" MOCK_GIT_PULL_RC=0 MOCK_GIT_CALLS="$TMP_ROOT/git-calls.log"
+ai_brain_mock_python3 "$BIN"
 export PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT" HOME="$TMP_ROOT/userhome"
 export GIT_CONFIG_NOSYSTEM=1
 unset BRAIN_STARTER_PIN || true

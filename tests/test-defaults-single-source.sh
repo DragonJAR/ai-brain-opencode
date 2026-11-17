@@ -142,6 +142,7 @@ esac
 # so we compare package defaults as minute-hour cron fields.
 SCHED_VAULT="$TMP_ROOT/sched-vault"
 mkdir -p "$SCHED_VAULT/scripts/jobs" "$SCHED_VAULT/.opencode" "$SCHED_VAULT/⚙️ Meta" "$TMP_ROOT/bin"
+ai_brain_mock_python3 "$TMP_ROOT/bin"
 # intentionally no brain-config.json
 ai_brain_mock_platform "$TMP_ROOT/bin"
 SRC_SCHED="scripts/schedule.sh --dry-run (no vault config)"

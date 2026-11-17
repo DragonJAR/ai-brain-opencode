@@ -56,6 +56,8 @@ chmod +x "$TMP_ROOT/bin/osascript"
 
 ai_brain_mock_platform "$TMP_ROOT/bin"
 export MOCK_UNAME=Darwin
+# Nota: este test instala SU PROPIO wrapper python3 contador en $TMP_ROOT/bin
+# (no usar ai_brain_mock_python3 aquí: lo sobreescribiría).
 export PATH="$TMP_ROOT/bin:/usr/bin:/bin"
 
 bash "$JOB" >"$TMP_ROOT/out.txt" 2>"$TMP_ROOT/err.txt" || true

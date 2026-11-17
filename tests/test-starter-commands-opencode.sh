@@ -19,6 +19,7 @@ fail() {
 TMP_ROOT="$(ai_brain_test_root starter-commands)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 BIN="$TMP_ROOT/bin"
+ai_brain_mock_python3 "$BIN"
 ai_brain_mock_platform "$BIN"
 ai_brain_mock_git "$BIN"
 ai_brain_mock_opencode "$BIN"

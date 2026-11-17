@@ -26,6 +26,7 @@ ai_brain_mock_windows "$BIN"
 MOCK_GIT_CALLS="$TMP_ROOT/git-calls.log"
 : > "$MOCK_GIT_CALLS"
 export MOCK_UNAME=Linux MOCK_GIT_CALLS
+ai_brain_mock_python3 "$BIN"
 export PATH="$BIN:/usr/bin:/bin" TMPDIR="$TMP_ROOT"
 unset BRAIN_STARTER_PIN CDPATH || true
 

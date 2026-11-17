@@ -37,6 +37,7 @@ ai_brain_mock_git "$BIN"
 ai_brain_mock_opencode "$BIN"
 
 export MOCK_UNAME MOCK_VAULT MOCK_GIT_CALLS MOCK_CRONTAB_STATE MOCK_CRONTAB_CALLS MOCK_CRONTAB_WRITES
+ai_brain_mock_python3 "$BIN"
 export PATH="$BIN:/usr/bin:/bin"
 export TMPDIR="$TMP_ROOT"
 unset BRAIN_STARTER_PIN || true

@@ -96,6 +96,19 @@ ai_brain_shim() {
   chmod +x "$dest"
 }
 
+# ai_brain_mock_python3 <bin-dir>: shim `python3` que ejecuta el intérprete
+# REAL del host (python3 o, en su falta, python — el camino de fallback del
+# producto). Resuélvelo ANTES de restringir el PATH: en runners de Windows el
+# intérprete vive en el tool cache y no está en /usr/bin ni /bin.
+ai_brain_mock_python3() {
+  local bin="$1" real
+  mkdir -p "$bin"
+  real="$(command -v python3 || command -v python || true)"
+  [ -n "$real" ] || { printf 'ai_brain_mock_python3: no host interpreter\n' >&2; return 1; }
+  printf '#!/bin/sh\nexec "%s" "$@"\n' "$real" > "$bin/python3"
+  chmod +x "$bin/python3"
+}
+
 # A scheduled job needs the vault-side libraries install.sh copies next to it.
 # Usage: ai_brain_install_vault_libs <package-root> <vault>
 ai_brain_install_vault_libs() {
